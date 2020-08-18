@@ -30,6 +30,5 @@ dependencies {
 }
 
 shadowJar {
-    buildNum = "$System.env.TRAVIS_BUILD_NUMBER"
-    archiveVersion = "ddemin-$jmeterVer-$buildNum"
+    archiveVersion = "ddemin-$jmeterVer-${System.env.TRAVIS_BUILD_NUMBER}"
 }
