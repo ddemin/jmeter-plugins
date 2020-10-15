@@ -222,7 +222,6 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         String server;
         if (sampleResult.getURL() != null) {
             endpoint = anonymizeUrl(sampleResult.getURL());
-            sampleResult.getRequestHeaders()
             server = StringUtils.defaultIfEmpty(sampleResult.getURL().getHost(), NOT_AVAILABLE);
         } else {
             endpoint = NOT_AVAILABLE;
