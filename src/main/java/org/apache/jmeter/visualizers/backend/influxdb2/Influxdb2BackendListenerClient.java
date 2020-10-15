@@ -21,6 +21,7 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.InfluxDBClientFactory;
+import com.influxdb.client.WriteApi;
 import com.influxdb.client.domain.Ready;
 import com.influxdb.client.domain.WritePrecision;
 import com.influxdb.client.write.Point;
@@ -108,6 +109,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private ScheduledFuture<?> timerHandle;
     private InfluxDBClient influxDBClient;
     private String anonymizeRegex;
+    private WriteApi writeApi;
 
     public Influxdb2BackendListenerClient() {
         super();
@@ -147,6 +149,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                             (readiness == null ? "Can't check server readiness" : readiness.getUp())
             );
         }
+        writeApi = influxDBClient.getWriteApi();
 
         sendIntervalSec = context.getIntParameter(SEND_INTERVAL_SEC);
         launchId = context.getParameter(LAUNCH_ID);
@@ -267,40 +270,45 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private void sendMeasurements() {
         synchronized (LOCK) {
             try {
-                influxDBClient.getWriteApi().writePoints(measurementsBuffer);
+                writeApi.writePoints(measurementsBuffer);
             } catch (Throwable tr) {
                 LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage());
+            } finally {
+                measurementsBuffer.clear();
             }
-            measurementsBuffer.clear();
         }
     }
 
     private void sendEvent(boolean isStartOfTest) throws UnknownHostException {
-        eventsTagsMap.put("started", String.valueOf(isStartOfTest));
-        eventsTagsMap.put("launch_uuid", launchId);
+        try {
+            eventsTagsMap.put("started", String.valueOf(isStartOfTest));
+            eventsTagsMap.put("launch_uuid", launchId);
 
-        LOG.debug("Send event with tags: {}", eventsTagsMap);
-        Point eventPoint = Point
-                .measurement(ANNOTATION_MEASUREMENT)
-                .time(Instant.now(), WritePrecision.NS)
-                .addField("total_threads", (float) JMeterContextService.getTotalThreads())
-                .addTags(eventsTagsMap);
+            LOG.debug("Send event with tags: {}", eventsTagsMap);
+            Point eventPoint = Point
+                    .measurement(ANNOTATION_MEASUREMENT)
+                    .time(Instant.now(), WritePrecision.NS)
+                    .addField("total_threads", (float) JMeterContextService.getTotalThreads())
+                    .addTags(eventsTagsMap);
 
-        // Add User Variables
-        if (!isStartOfTest) {
-            JMeterContextService.getContext().getVariables().entrySet()
-                    .stream()
-                    .filter(entry -> entry.getValue() != null)
-                    .filter(entry ->
-                            variablesToFilter
-                                    .matcher(String.valueOf(entry.getKey()))
-                                    .find()
-                    )
-                    .sorted(Map.Entry.comparingByKey())
-                    .forEach(entry -> eventPoint.addField(entry.getKey(), String.valueOf(entry.getValue())));
+            // Add User Variables
+            if (!isStartOfTest) {
+                JMeterContextService.getContext().getVariables().entrySet()
+                        .stream()
+                        .filter(entry -> entry.getValue() != null)
+                        .filter(entry ->
+                                variablesToFilter
+                                        .matcher(String.valueOf(entry.getKey()))
+                                        .find()
+                        )
+                        .sorted(Map.Entry.comparingByKey())
+                        .forEach(entry -> eventPoint.addField(entry.getKey(), String.valueOf(entry.getValue())));
+            }
+
+            writeApi.writePoint(eventPoint);
+        } finally {
+            eventsTagsMap.clear();
         }
-
-        influxDBClient.getWriteApi().writePoint(eventPoint);
     }
 
     private String anonymizeUrl(URL url) {
