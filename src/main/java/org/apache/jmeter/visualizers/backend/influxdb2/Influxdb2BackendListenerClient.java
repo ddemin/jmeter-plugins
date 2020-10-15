@@ -21,6 +21,7 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.InfluxDBClientFactory;
+import com.influxdb.client.WriteApi;
 import com.influxdb.client.domain.Ready;
 import com.influxdb.client.domain.WritePrecision;
 import com.influxdb.client.write.Point;
@@ -101,6 +102,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private ScheduledExecutorService scheduler;
     private ScheduledFuture<?> timerHandle;
     private InfluxDBClient influxDBClient;
+    private WriteApi writeApi;
 
     public Influxdb2BackendListenerClient() {
         super();
@@ -140,6 +142,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                             (readiness == null ? "Can't check server readiness" : readiness.getUp())
                     );
         }
+        writeApi = influxDBClient.getWriteApi();
 
         sendIntervalSec = context.getIntParameter(SEND_INTERVAL_SEC);
         launchId = context.getParameter(LAUNCH_ID);
@@ -246,25 +249,30 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private void sendMeasurements() {
         synchronized (LOCK) {
             try {
-                influxDBClient.getWriteApi().writePoints(measurementsBuffer);
+                writeApi.writePoints(measurementsBuffer);
             } catch (Throwable tr) {
                 log.error("Something goes wrong during InfluxDB integration: " + tr.getMessage());
+            } finally {
+                measurementsBuffer.clear();
             }
-            measurementsBuffer.clear();
         }
     }
 
     private void sendEvent(boolean isStartOfTest) throws UnknownHostException {
-        eventsTagsMap.put("started", String.valueOf(isStartOfTest));
+        try {
+            eventsTagsMap.put("started", String.valueOf(isStartOfTest));
 
-        log.debug("Send event with tags: {}", eventsTagsMap);
-        influxDBClient.getWriteApi().writePoint(
-                Point
-                        .measurement(ANNOTATION_MEASUREMENT)
-                        .addField("launch_uuid", launchId)
-                        .addTags(eventsTagsMap)
-                        .time(Instant.now(), WritePrecision.NS)
-        );
+            log.debug("Send event with tags: {}", eventsTagsMap);
+            writeApi.writePoint(
+                    Point
+                            .measurement(ANNOTATION_MEASUREMENT)
+                            .addField("launch_uuid", launchId)
+                            .addTags(eventsTagsMap)
+                            .time(Instant.now(), WritePrecision.NS)
+            );
+        } finally {
+            eventsTagsMap.clear();
+        }
     }
 
     private String anonymizeUrl(URL url) {
