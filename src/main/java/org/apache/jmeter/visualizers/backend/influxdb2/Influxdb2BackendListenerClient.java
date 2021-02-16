@@ -86,10 +86,10 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private static final String NOT_AVAILABLE = "N/A";
     private static final int MAX_CHARS_IN_MSG = 256;
 
-    private static final String FIELD_BYTES = "bytes_total";
-    private static final String FIELD_RESPONSE_TIME = "response_time";
-    private static final String FIELD_ERROR_RATE = "error_rate";
-    private static final String FIELD_ERRORS_COUNT = "errors_count";
+    private static final String MEASUREMENT_BYTES = "bytes_total";
+    private static final String MEASUREMENT_RESPONSE_TIME = "response_time";
+    private static final String MEASUREMENT_RATE = "rate";
+    private static final String MEASUREMENT_ERRORS = "errors";
 
     static {
         DEFAULT_ARGS.put(ARG_INFLUXDB_2_URL, "https://influxdb2_url:9999");
@@ -335,13 +335,13 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                     k -> new HashMap<>()
             );
             fieldsValuesMap
-                    .computeIfAbsent(FIELD_BYTES, k -> new Statistic())
+                    .computeIfAbsent(MEASUREMENT_BYTES, k -> new Statistic())
                     .add(sampleResult.getBytesAsLong() + sampleResult.getSentBytes());
             fieldsValuesMap
-                    .computeIfAbsent(FIELD_RESPONSE_TIME, k -> new Statistic())
+                    .computeIfAbsent(MEASUREMENT_RESPONSE_TIME, k -> new Statistic())
                     .add(sampleResult.getTime());
             fieldsValuesMap
-                    .computeIfAbsent(FIELD_ERROR_RATE, k -> new Statistic())
+                    .computeIfAbsent(MEASUREMENT_RATE, k -> new Statistic())
                     .add(sampleResult.isSuccessful() ? 0L : 1L);
 
             if (!sampleResult.isSuccessful()) {
@@ -375,7 +375,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                         )
                         .build();
                 metricsBuffer.computeIfAbsent(auxMeasurement, k -> new HashMap<>())
-                        .computeIfAbsent(FIELD_ERRORS_COUNT, k -> new Statistic())
+                        .computeIfAbsent(MEASUREMENT_ERRORS, k -> new Statistic())
                         .add(1L);
             }
 
@@ -400,26 +400,27 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                                                 .appendLineProtocolRawData(tags);
                                         float avg = stats.getAverage();
                                         switch (field) {
-                                            case FIELD_RESPONSE_TIME:
+                                            case MEASUREMENT_RESPONSE_TIME:
                                                 lineProtocolMessageBuilder
                                                         .appendLineProtocolField("avg", avg)
-                                                        .appendLineProtocolField("rps", n / (float) sendIntervalSec)
                                                         .appendLineProtocolField("max", stats.getMax())
                                                         .appendLineProtocolField("min", stats.getMin())
                                                         .appendLineProtocolField("p50", stats.getPercentile(50))
                                                         .appendLineProtocolField("p95", stats.getPercentile(95));
                                                 break;
-                                            case FIELD_BYTES:
+                                            case MEASUREMENT_BYTES:
                                                 lineProtocolMessageBuilder
                                                         .appendLineProtocolField("avg", avg);
                                                 break;
-                                            case FIELD_ERROR_RATE:
+                                            case MEASUREMENT_RATE:
                                                 lineProtocolMessageBuilder
-                                                        .appendLineProtocolField("error_rate", avg);
+                                                        .appendLineProtocolField("calls", n)
+                                                        .appendLineProtocolField("rps", n / (float) sendIntervalSec)
+                                                        .appendLineProtocolField("errors", stats.getSum());
                                                 break;
-                                            case FIELD_ERRORS_COUNT:
+                                            case MEASUREMENT_ERRORS:
                                                 lineProtocolMessageBuilder
-                                                        .appendLineProtocolField("errors_count", stats.getSum());
+                                                        .appendLineProtocolField("count", stats.getSum());
                                                 break;
                                             default:
                                                 LOG.error("Unknown field: " + field);

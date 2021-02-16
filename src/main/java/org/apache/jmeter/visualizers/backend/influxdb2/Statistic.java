@@ -12,7 +12,7 @@ public class Statistic {
     private long sum = 0;
 
     public void add(long newItem) {
-        if (size >= preallocated) {
+        if (size >= data.length) {
             System.arraycopy(data, 0, new long[data.length + preallocated], 0, data.length);
         }
         sum += newItem;
@@ -48,7 +48,7 @@ public class Statistic {
     public long getPercentile(int level) {
         assertStorageIsNotEmpty();
         sortStorageIfNot();
-        return data[(int) Math.ceil(level / 100.0 * size)];
+        return data[(int) Math.floor((level / 100.0) * size)];
     }
 
     public void clear() {
