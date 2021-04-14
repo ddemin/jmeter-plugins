@@ -74,8 +74,6 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
 
     private static final String LAUNCH_MEASUREMENT = "launches";
     private static final String VARIABLE_MEASUREMENT = "variables";
-    private static final String MAIN_MEASUREMENT = "main";
-    private static final String AUX_MEASUREMENT = "aux";
 
     private static final String LAUNCH_TAG = "launch";
     private static final String IS_STARTED_TAG = "isStarted";
@@ -83,8 +81,15 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
 
     private static final String DEFAULT_URL_ANONYMIZE_REGEXP
             = "([0-9a-zA-Z-]+-[0-9a-zA-Z-]+-[0-9a-zA-Z-]+|[0-9a-z-]+-[0-9a-z-]+|[0-9]+)";
+    private static final String MSG_ANONYMIZATION_REGEXP = "([0-9a-zA-Z-]+-[0-9a-zA-Z-]+-[0-9a-zA-Z-]+|[0-9]+)";
+    private static final String MSG_ANONYMIZATION_PLACEMENT = "X";
     private static final String NOT_AVAILABLE = "N/A";
     private static final int MAX_CHARS_IN_MSG = 256;
+
+    private static final String MEASUREMENT_BYTES = "bytes_total";
+    private static final String MEASUREMENT_RESPONSE_TIME = "response_time";
+    private static final String MEASUREMENT_RATE = "rate";
+    private static final String MEASUREMENT_ERRORS = "errors";
 
     static {
         DEFAULT_ARGS.put(ARG_INFLUXDB_2_URL, "https://influxdb2_url:9999");
@@ -107,9 +112,9 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
 
     private final SortedMap<String, String> eventsTagsMap = new TreeMap<>();
     private final ConcurrentHashMap<String, Boolean> labelsWhiteList = new ConcurrentHashMap<>();
+    private final HashMap<String, HashMap<String, Statistic>> metricsBuffer = new HashMap<>();
 
     private LineProtocolMessageBuilder lineProtocolMessageBuilder;
-
     private String launchId;
     private String samplersRegex;
     private String anonymizeRegex;
@@ -126,6 +131,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private URI influxDBMetaWriteUrl;
     private String influxDbAuthHeader;
     private boolean isReady;
+    private int sendIntervalSec;
 
     public Influxdb2BackendListenerClient() {
         super();
@@ -204,11 +210,12 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                         .replace("//api", "/api")
         );
 
-        int sendIntervalSec = context.getIntParameter(ARG_INTERVAL_SEC);
+        sendIntervalSec = context.getIntParameter(ARG_INTERVAL_SEC);
 
         launchId = context.getParameter(ARG_LAUNCH_ID);
         eventsTagsMap.put(LAUNCH_TAG, launchId);
         eventsTagsMap.put("environment", context.getParameter(ARG_ENV, NOT_AVAILABLE));
+        eventsTagsMap.put("interval", String.valueOf(sendIntervalSec));
         eventsTagsMap.put("host", InetAddress.getLocalHost().getHostName());
         eventsTagsMap.put("profile", context.getParameter(ARG_PROFILE, NOT_AVAILABLE));
         eventsTagsMap.put("scenario", context.getParameter(ARG_SCENARIO, NOT_AVAILABLE));
@@ -302,7 +309,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
 
     private void saveMeasurement(SampleResult sampleResult) {
         String code = StringUtils.defaultIfEmpty(sampleResult.getResponseCode(), NOT_AVAILABLE);
-        boolean nonDigitCode = NumberUtils.isDigits(code);
+        boolean isDigitCode = NumberUtils.isDigits(code);
 
         String label = sampleResult.getSampleLabel().trim();
         String endpoint = sampleResult.getURL() == null || StringUtils.isEmpty(sampleResult.getURL().getPath())
@@ -310,14 +317,10 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                 : anonymizeUrl(sampleResult.getURL().getPath().replace("//", "/").trim());
 
         synchronized (LOCK) {
-            lineProtocolMessageBuilder
-                    .appendLineProtocolMeasurement(MAIN_MEASUREMENT)
-                    .appendLineProtocolTag(
-                            "code",
-                            nonDigitCode ? code : "See msg field"
-                    )
+
+            LineProtocolMessageBuilder mainBuilder = new LineProtocolMessageBuilder();
+            String mainMeasurement = mainBuilder
                     .appendLineProtocolTag("endpoint", endpoint)
-                    .appendLineProtocolTag("isPassed", sampleResult.isSuccessful() ? "true" : "false")
                     .appendLineProtocolTag(LAUNCH_TAG, launchId)
                     .appendLineProtocolTag("name", Strings.isEmpty(label) ? NOT_AVAILABLE : label)
                     .appendLineProtocolTag(
@@ -326,20 +329,42 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                                     ? StringUtils.defaultIfEmpty(sampleResult.getURL().getHost(), NOT_AVAILABLE)
                                     : NOT_AVAILABLE
                     )
-                    .appendLineProtocolField("bytes_recv", sampleResult.getBytesAsLong() + 0.0f)
-                    .appendLineProtocolField("bytes_sent", sampleResult.getSentBytes() + 0.0f)
-                    .appendLineProtocolField("time_ms", sampleResult.getTime() + 0.0f)
-                    .appendLineProtocolTimestampNs(enrichMsTimestamp(sampleResult.getTimeStamp()));
+                    .build();
+            HashMap<String, Statistic> fieldsValuesMap = metricsBuffer.computeIfAbsent(
+                    mainMeasurement,
+                    k -> new HashMap<>()
+            );
+            fieldsValuesMap
+                    .computeIfAbsent(MEASUREMENT_BYTES, k -> new Statistic())
+                    .add(sampleResult.getBytesAsLong() + sampleResult.getSentBytes());
+            fieldsValuesMap
+                    .computeIfAbsent(MEASUREMENT_RESPONSE_TIME, k -> new Statistic())
+                    .add(sampleResult.getTime());
+            fieldsValuesMap
+                    .computeIfAbsent(MEASUREMENT_RATE, k -> new Statistic())
+                    .add(sampleResult.isSuccessful() ? 0L : 1L);
 
-            if (!sampleResult.isSuccessful() || nonDigitCode) {
-                lineProtocolMessageBuilder
-                        .appendLineProtocolMeasurement(AUX_MEASUREMENT)
-                        .appendLineProtocolTag(
-                                "code",
-                                nonDigitCode ? code : "See msg field"
-                        )
+            if (!sampleResult.isSuccessful()) {
+                LineProtocolMessageBuilder auxBuilder = new LineProtocolMessageBuilder();
+                String auxMeasurement = auxBuilder
                         .appendLineProtocolTag("endpoint", endpoint)
-                        .appendLineProtocolTag("isPassed", sampleResult.isSuccessful() ? "true" : "false")
+                        .appendLineProtocolTag(
+                                "error",
+                                (StringUtils.isNoneEmpty(code) && isDigitCode
+                                        ? "HTTP " + code + ": "
+                                        : "")
+                                        + StringUtils.substring(
+                                        StringUtils.firstNonEmpty(
+                                                sampleResult.getFirstAssertionFailureMessage(),
+                                                sampleResult.getResponseMessage(),
+                                                code,
+                                                NOT_AVAILABLE
+                                        ),
+                                        0,
+                                        MAX_CHARS_IN_MSG
+                                )
+                                        .replaceAll(MSG_ANONYMIZATION_REGEXP, MSG_ANONYMIZATION_PLACEMENT)
+                        )
                         .appendLineProtocolTag(LAUNCH_TAG, launchId)
                         .appendLineProtocolTag("name", Strings.isEmpty(label) ? NOT_AVAILABLE : label)
                         .appendLineProtocolTag(
@@ -348,28 +373,65 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                                         ? StringUtils.defaultIfEmpty(sampleResult.getURL().getHost(), NOT_AVAILABLE)
                                         : NOT_AVAILABLE
                         )
-                        .appendLineProtocolField(
-                                "msg",
-                                StringUtils.substring(
-                                        StringUtils.firstNonEmpty(
-                                                nonDigitCode
-                                                        ? code
-                                                        : sampleResult.getFirstAssertionFailureMessage(),
-                                                sampleResult.getResponseMessage(),
-                                                NOT_AVAILABLE
-                                        ),
-                                        0,
-                                        MAX_CHARS_IN_MSG
-                                )
-                        )
-                        .appendLineProtocolTimestampNs(enrichMsTimestamp(sampleResult.getTimeStamp()));
+                        .build();
+                metricsBuffer.computeIfAbsent(auxMeasurement, k -> new HashMap<>())
+                        .computeIfAbsent(MEASUREMENT_ERRORS, k -> new Statistic())
+                        .add(1L);
             }
+
         }
     }
 
     private void sendMeasurements() {
         synchronized (LOCK) {
             try {
+
+                long timestamp = Instant.now().toEpochMilli();
+                metricsBuffer.forEach(
+                        (tags, fields) -> {
+                            fields.forEach(
+                                    (field, stats) -> {
+                                        long n = stats.getSize();
+                                        if (n <= 0) {
+                                            return;
+                                        }
+                                        lineProtocolMessageBuilder
+                                                .appendLineProtocolMeasurement(field)
+                                                .appendLineProtocolRawData(tags);
+                                        float avg = stats.getAverage();
+                                        switch (field) {
+                                            case MEASUREMENT_RESPONSE_TIME:
+                                                lineProtocolMessageBuilder
+                                                        .appendLineProtocolField("avg", avg)
+                                                        .appendLineProtocolField("max", stats.getMax())
+                                                        .appendLineProtocolField("min", stats.getMin())
+                                                        .appendLineProtocolField("p50", stats.getPercentile(50))
+                                                        .appendLineProtocolField("p95", stats.getPercentile(95));
+                                                break;
+                                            case MEASUREMENT_BYTES:
+                                                lineProtocolMessageBuilder
+                                                        .appendLineProtocolField("avg", avg);
+                                                break;
+                                            case MEASUREMENT_RATE:
+                                                lineProtocolMessageBuilder
+                                                        .appendLineProtocolField("calls", n)
+                                                        .appendLineProtocolField("rps", n / (float) sendIntervalSec)
+                                                        .appendLineProtocolField("errors", stats.getSum());
+                                                break;
+                                            case MEASUREMENT_ERRORS:
+                                                lineProtocolMessageBuilder
+                                                        .appendLineProtocolField("count", stats.getSum());
+                                                break;
+                                            default:
+                                                LOG.error("Unknown field: " + field);
+                                                return;
+                                        }
+                                        lineProtocolMessageBuilder
+                                                .appendLineProtocolTimestampNs(enrichMsTimestamp(timestamp));
+                                    }
+                            );
+                        }
+                );
                 if (lineProtocolMessageBuilder.getAddedLines() == 0) {
                     return;
                 }
@@ -447,6 +509,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
 
     private void cleanDataPointBuilder() {
         synchronized (LOCK) {
+            metricsBuffer.forEach((k, v) -> v.forEach((field, stat) -> stat.clear()));
             lineProtocolMessageBuilder = new LineProtocolMessageBuilder();
         }
     }

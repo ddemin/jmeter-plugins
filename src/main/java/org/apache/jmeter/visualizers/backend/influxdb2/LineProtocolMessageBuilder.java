@@ -30,6 +30,7 @@ public class LineProtocolMessageBuilder {
                 measurement
                         .replace(" ", "\\ ")
                         .replace(",", "\\,")
+                        .replace("\n", "\\ ")
         );
     }
 
@@ -47,6 +48,7 @@ public class LineProtocolMessageBuilder {
                         .replace(" ", "\\ ")
                         .replace(",", "\\,")
                         .replace("=", "\\=")
+                        .replace("\n", "\\ ")
         );
     }
 
@@ -60,6 +62,7 @@ public class LineProtocolMessageBuilder {
                 value
                         .replace("\"", "\\\"")
                         .replace("\\", "\\\\")
+                        .replace("\n", "\\ ")
         );
     }
 
@@ -69,6 +72,11 @@ public class LineProtocolMessageBuilder {
     }
 
     public LineProtocolMessageBuilder appendLineProtocolField(String key, float value) {
+        calculateAndAppendFieldDelimiter();
+        return appendLineProtocolKeyValue(key, value);
+    }
+
+    public LineProtocolMessageBuilder appendLineProtocolField(String key, double value) {
         calculateAndAppendFieldDelimiter();
         return appendLineProtocolKeyValue(key, value);
     }
@@ -137,6 +145,14 @@ public class LineProtocolMessageBuilder {
     }
 
     public LineProtocolMessageBuilder appendLineProtocolKeyValue(String key, float value) {
+        stringBuilder
+                .append(key)
+                .append('=')
+                .append(value);
+        return this;
+    }
+
+    public LineProtocolMessageBuilder appendLineProtocolKeyValue(String key, double value) {
         stringBuilder
                 .append(key)
                 .append('=')
