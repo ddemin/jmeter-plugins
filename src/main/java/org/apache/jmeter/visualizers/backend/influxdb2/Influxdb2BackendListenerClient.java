@@ -54,7 +54,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
 
     private static final int MAX_POOL_SIZE = 1;
     private static final int DEFAULT_SEND_INTERVAL = 10;
-    private static final Object LOCK = new Object();
+    private static final Object GLOBAL_LOCK = new Object();
 
     private static final Map<String, String> DEFAULT_ARGS = new LinkedHashMap<>();
     private static final String ARG_INFLUXDB_2_URL = "influxdb2_url";
@@ -84,12 +84,15 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private static final String MSG_ANONYMIZATION_REGEXP = "([0-9a-zA-Z-]+-[0-9a-zA-Z-]+-[0-9a-zA-Z-]+|[0-9]+)";
     private static final String MSG_ANONYMIZATION_PLACEMENT = "X";
     private static final String NOT_AVAILABLE = "N/A";
+    public static final String JMETER_PROP_SEPARATOR = ".";
     private static final int MAX_CHARS_IN_MSG = 256;
 
     private static final String MEASUREMENT_BYTES = "bytes_total";
     private static final String MEASUREMENT_RESPONSE_TIME = "response_time";
     private static final String MEASUREMENT_RATE = "rate";
     private static final String MEASUREMENT_ERRORS = "errors";
+    private static final Map<String, String> SERVICE_BY_URL = new HashMap<>();
+    private static final Map<String, String> SERVICE_BY_HOST = new ConcurrentHashMap<>();
 
     static {
         DEFAULT_ARGS.put(ARG_INFLUXDB_2_URL, "https://influxdb2_url:9999");
@@ -249,6 +252,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     public void teardownTest(BackendListenerContext context) throws Exception {
         super.teardownTest(context);
         labelsWhiteList.clear();
+        SERVICE_BY_URL.clear();
         destroyInfluxDbClient();
     }
 
@@ -308,6 +312,8 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     }
 
     private void saveMeasurement(SampleResult sampleResult) {
+        initServiceByHostMap();
+
         String code = StringUtils.defaultIfEmpty(sampleResult.getResponseCode(), NOT_AVAILABLE);
         boolean isDigitCode = NumberUtils.isDigits(code);
 
@@ -315,21 +321,26 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         String endpoint = sampleResult.getURL() == null || StringUtils.isEmpty(sampleResult.getURL().getPath())
                 ? NOT_AVAILABLE
                 : anonymizeUrl(sampleResult.getURL().getPath().replace("//", "/").trim());
+        String host = sampleResult.getURL() == null || StringUtils.isBlank(sampleResult.getURL().getHost())
+                ? NOT_AVAILABLE
+                : sampleResult.getURL().getHost().trim().toLowerCase();
+        String component = SERVICE_BY_HOST.computeIfAbsent(
+                host,
+                h -> SERVICE_BY_URL.entrySet().stream()
+                        .filter(entry -> entry.getKey().contains(host))
+                        .map(Map.Entry::getValue)
+                        .findFirst().orElse(host)
+        );
 
-        synchronized (LOCK) {
-
+        synchronized (GLOBAL_LOCK) {
             LineProtocolMessageBuilder mainBuilder = new LineProtocolMessageBuilder();
             String mainMeasurement = mainBuilder
+                    .appendLineProtocolTag("component", component)
                     .appendLineProtocolTag("endpoint", endpoint)
                     .appendLineProtocolTag(LAUNCH_TAG, launchId)
                     .appendLineProtocolTag("name", Strings.isEmpty(label) ? NOT_AVAILABLE : label)
-                    .appendLineProtocolTag(
-                            "server",
-                            sampleResult.getURL() != null
-                                    ? StringUtils.defaultIfEmpty(sampleResult.getURL().getHost(), NOT_AVAILABLE)
-                                    : NOT_AVAILABLE
-                    )
                     .build();
+
             HashMap<String, Statistic> fieldsValuesMap = metricsBuffer.computeIfAbsent(
                     mainMeasurement,
                     k -> new HashMap<>()
@@ -347,6 +358,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
             if (!sampleResult.isSuccessful()) {
                 LineProtocolMessageBuilder auxBuilder = new LineProtocolMessageBuilder();
                 String auxMeasurement = auxBuilder
+                        .appendLineProtocolTag("component", component)
                         .appendLineProtocolTag("endpoint", endpoint)
                         .appendLineProtocolTag(
                                 "error",
@@ -367,12 +379,6 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                         )
                         .appendLineProtocolTag(LAUNCH_TAG, launchId)
                         .appendLineProtocolTag("name", Strings.isEmpty(label) ? NOT_AVAILABLE : label)
-                        .appendLineProtocolTag(
-                                "server",
-                                sampleResult.getURL() != null
-                                        ? StringUtils.defaultIfEmpty(sampleResult.getURL().getHost(), NOT_AVAILABLE)
-                                        : NOT_AVAILABLE
-                        )
                         .build();
                 metricsBuffer.computeIfAbsent(auxMeasurement, k -> new HashMap<>())
                         .computeIfAbsent(MEASUREMENT_ERRORS, k -> new Statistic())
@@ -382,8 +388,35 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         }
     }
 
+    // TODO refactor
+    private void initServiceByHostMap() {
+        synchronized (GLOBAL_LOCK) {
+            if (SERVICE_BY_URL.isEmpty()) {
+                // TODO This is only 1 way to define url -> component mapping
+                JMeterContextService.getContext().getProperties()
+                        .entrySet()
+                        .stream()
+                        .filter(entry -> {
+                            String key = entry.getKey().toString().toLowerCase();
+                            return key.startsWith("component.") && (key.endsWith(".url") || key.endsWith(".jdbc"));
+                        })
+                        .filter(entry -> entry.getValue() != null && !entry.getValue().toString().trim().isEmpty())
+                        .map(entry ->
+                                new AbstractMap.SimpleEntry<>(
+                                        entry.getValue().toString().trim().toLowerCase(),
+                                        StringUtils.substringBeforeLast(
+                                                StringUtils.substringAfter(entry.getKey().toString(), JMETER_PROP_SEPARATOR),
+                                                JMETER_PROP_SEPARATOR
+                                        ).toLowerCase()
+                                )
+                        )
+                        .forEach(entry -> SERVICE_BY_URL.put(entry.getKey(), entry.getValue()));
+            }
+        }
+    }
+
     private void sendMeasurements() {
-        synchronized (LOCK) {
+        synchronized (GLOBAL_LOCK) {
             try {
 
                 long timestamp = Instant.now().toEpochMilli();
@@ -406,7 +439,8 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                                                         .appendLineProtocolField("max", stats.getMax())
                                                         .appendLineProtocolField("min", stats.getMin())
                                                         .appendLineProtocolField("p50", stats.getPercentile(50))
-                                                        .appendLineProtocolField("p95", stats.getPercentile(95));
+                                                        .appendLineProtocolField("p95", stats.getPercentile(95))
+                                                        .appendLineProtocolField("p99", stats.getPercentile(99));
                                                 break;
                                             case MEASUREMENT_BYTES:
                                                 lineProtocolMessageBuilder
@@ -508,7 +542,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     }
 
     private void cleanDataPointBuilder() {
-        synchronized (LOCK) {
+        synchronized (GLOBAL_LOCK) {
             metricsBuffer.forEach((k, v) -> v.forEach((field, stat) -> stat.clear()));
             lineProtocolMessageBuilder = new LineProtocolMessageBuilder();
         }
