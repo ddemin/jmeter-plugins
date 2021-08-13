@@ -29,11 +29,11 @@ import org.apache.logging.log4j.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.http.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -93,6 +93,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private static final String MEASUREMENT_ERRORS = "errors";
     private static final Map<String, String> SERVICE_BY_URL = new HashMap<>();
     private static final Map<String, String> SERVICE_BY_HOST = new ConcurrentHashMap<>();
+    private static final Queue<HttpRequest> FAILED_REQUESTS_QUEUE = new ConcurrentLinkedQueue<>();
 
     static {
         DEFAULT_ARGS.put(ARG_INFLUXDB_2_URL, "https://influxdb2_url:9999");
@@ -143,6 +144,16 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     @Override
     public void run() {
         sendMeasurements();
+        while (FAILED_REQUESTS_QUEUE.peek() != null) {
+            HttpRequest request = FAILED_REQUESTS_QUEUE.poll();
+            try {
+                // TODO Hack, prevent very frequent requests
+                Thread.sleep(1000);
+                tryToSendRequestToInflux(request);
+            } catch (IOException | InterruptedException e) {
+                FAILED_REQUESTS_QUEUE.add(request);
+            }
+        }
     }
 
     @Override
@@ -169,7 +180,9 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         labelsWhiteList.clear();
         cleanDataPointBuilder();
 
-        client = HttpClient.newHttpClient();
+        client = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
         isDestroyed = false;
         influxDbAuthHeader = "Token " + context.getParameter(ARG_INFLUXDB_2_TOKEN);
 
@@ -469,20 +482,39 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                 if (lineProtocolMessageBuilder.getAddedLines() == 0) {
                     return;
                 }
-                HttpResponse<String> response = client.send(
-                        buildWriteRequest(influxDbMainWriteUrl, lineProtocolMessageBuilder),
-                        HttpResponse.BodyHandlers.ofString()
-                );
-                if (response.statusCode() >= 400) {
-                    throw new IllegalStateException(
-                            "HTTP body: " + response.body() + ", HTTP code: " + response.statusCode()
-                    );
-                }
+                tryToSendRequestToInflux(buildWriteRequest(influxDbMainWriteUrl, lineProtocolMessageBuilder));
             } catch (Throwable tr) {
                 LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage());
             } finally {
                 cleanDataPointBuilder();
             }
+        }
+    }
+
+    private void tryToSendRequestToInflux(HttpRequest httpRequest) throws IOException, InterruptedException {
+        HttpResponse<String> response = null;
+        try {
+            response = client.send(
+                    httpRequest,
+                    HttpResponse.BodyHandlers.ofString()
+            );
+        } catch (SocketTimeoutException | HttpTimeoutException ex) {
+            FAILED_REQUESTS_QUEUE.add(httpRequest);
+            throw new RuntimeException(ex);
+        } catch (IOException ioex) {
+            if (StringUtils.isNotEmpty(ioex.getMessage()) && ioex.getMessage().contains("too many")) {
+                FAILED_REQUESTS_QUEUE.add(httpRequest);
+            }
+            throw new RuntimeException(ioex);
+        }
+
+        if (response != null && response.statusCode() >= 400 && response.statusCode() < 500) {
+            throw new IllegalStateException(
+                    "HTTP body: " + response.body() + ", HTTP code: " + response.statusCode()
+            );
+        } else if (response != null && response.statusCode() >= 500) {
+            FAILED_REQUESTS_QUEUE.add(httpRequest);
+            throw new RuntimeException("HTTP 5xx response: " + response.body());
         }
     }
 
@@ -527,15 +559,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         }
 
         try {
-            HttpResponse<String> response = client.send(
-                    buildWriteRequest(influxDBMetaWriteUrl, eventPointBuilder),
-                    HttpResponse.BodyHandlers.ofString()
-            );
-            if (response.statusCode() >= 400) {
-                throw new IllegalStateException(
-                        "HTTP code:  " + response.statusCode() + ", HTTP body:  " + response.body()
-                );
-            }
+            tryToSendRequestToInflux(buildWriteRequest(influxDBMetaWriteUrl, eventPointBuilder));
         } catch (Throwable tr) {
             LOG.error("Something goes wrong during InfluxDB events write operation: " + tr.getMessage());
         }
