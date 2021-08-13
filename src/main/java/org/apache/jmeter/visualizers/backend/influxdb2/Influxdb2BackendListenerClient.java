@@ -30,9 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.SocketTimeoutException;
-import java.net.URI;
+import java.net.*;
 import java.net.http.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -144,6 +142,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     @Override
     public void run() {
         sendMeasurements();
+        List<HttpRequest> failedRepeatedReqs = new LinkedList<>();
         while (FAILED_REQUESTS_QUEUE.peek() != null) {
             HttpRequest request = FAILED_REQUESTS_QUEUE.poll();
             try {
@@ -151,9 +150,10 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                 Thread.sleep(1000);
                 tryToSendRequestToInflux(request);
             } catch (IOException | InterruptedException e) {
-                FAILED_REQUESTS_QUEUE.add(request);
+                failedRepeatedReqs.add(request);
             }
         }
+        FAILED_REQUESTS_QUEUE.addAll(failedRepeatedReqs) ;
     }
 
     @Override
@@ -186,9 +186,9 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         isDestroyed = false;
         influxDbAuthHeader = "Token " + context.getParameter(ARG_INFLUXDB_2_TOKEN);
 
-        String influxDbUrl = context.getParameter(ARG_INFLUXDB_2_URL);
+        String influxDbUrl = context.getParameter(ARG_INFLUXDB_2_URL).trim();
         HttpRequest authRequest = HttpRequest.newBuilder()
-                .uri(URI.create((influxDbUrl + "/ready").replace("//ready", "/ready")))
+                .uri(URI.create((StringUtils.removeEnd(influxDbUrl, "/") + "/ready").replace("//ready", "/ready")))
                 .timeout(Duration.ofSeconds(10))
                 .header("Content-Type", "plain/text")
                 .header("Authorization", influxDbAuthHeader)
@@ -280,7 +280,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         return HttpRequest.newBuilder()
                 .uri(targetUri)
                 .timeout(Duration.ofSeconds(5))
-                .version(HttpClient.Version.HTTP_2)
+                .version(HttpClient.Version.HTTP_1_1)
                 .header("Accept", "application/json")
                 .header("Content-Type", "text/plain; charset=utf-8")
                 .header("Authorization", influxDbAuthHeader)
