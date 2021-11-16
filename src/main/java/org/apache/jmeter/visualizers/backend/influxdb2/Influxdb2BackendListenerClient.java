@@ -344,7 +344,6 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                         .findFirst().orElse(host)
         );
 
-
         synchronized (GLOBAL_LOCK) {
             String trxName = Strings.isEmpty(label) ? NOT_AVAILABLE : label;
             LineProtocolMessageBuilder mainBuilder = new LineProtocolMessageBuilder();
