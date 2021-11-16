@@ -346,12 +346,13 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
 
 
         synchronized (GLOBAL_LOCK) {
+            String trxName = Strings.isEmpty(label) ? NOT_AVAILABLE : label;
             LineProtocolMessageBuilder mainBuilder = new LineProtocolMessageBuilder();
             String mainMeasurement = mainBuilder
                     .appendLineProtocolTag("component", component)
-                    .appendLineProtocolTag("endpoint", endpoint)
+                    .appendLineProtocolTag("endpoint", endpoint.equalsIgnoreCase(NOT_AVAILABLE) ? trxName : endpoint)
                     .appendLineProtocolTag(LAUNCH_TAG, launchId)
-                    .appendLineProtocolTag("name", Strings.isEmpty(label) ? NOT_AVAILABLE : label)
+                    .appendLineProtocolTag("name", trxName)
                     .build();
 
             HashMap<String, Statistic> fieldsValuesMap = metricsBuffer.computeIfAbsent(
