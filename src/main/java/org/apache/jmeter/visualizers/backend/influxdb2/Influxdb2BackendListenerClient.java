@@ -21,6 +21,7 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.jmeter.config.Arguments;
+import org.apache.jmeter.protocol.http.sampler.HTTPSampleResult;
 import org.apache.jmeter.samplers.SampleResult;
 import org.apache.jmeter.threads.JMeterContextService;
 import org.apache.jmeter.visualizers.backend.AbstractBackendListenerClient;
@@ -153,7 +154,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                 failedRepeatedReqs.add(request);
             }
         }
-        FAILED_REQUESTS_QUEUE.addAll(failedRepeatedReqs) ;
+        FAILED_REQUESTS_QUEUE.addAll(failedRepeatedReqs);
     }
 
     @Override
@@ -331,9 +332,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         boolean isDigitCode = NumberUtils.isDigits(code);
 
         String label = sampleResult.getSampleLabel().trim();
-        String endpoint = sampleResult.getURL() == null || StringUtils.isEmpty(sampleResult.getURL().getPath())
-                ? NOT_AVAILABLE
-                : anonymizeUrl(sampleResult.getURL().getPath().replace("//", "/").trim());
+        String endpoint = parseSamplerForEndpoint(sampleResult);
         String host = sampleResult.getURL() == null || StringUtils.isBlank(sampleResult.getURL().getHost())
                 ? NOT_AVAILABLE
                 : sampleResult.getURL().getHost().trim().toLowerCase();
@@ -344,6 +343,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                         .map(Map.Entry::getValue)
                         .findFirst().orElse(host)
         );
+
 
         synchronized (GLOBAL_LOCK) {
             LineProtocolMessageBuilder mainBuilder = new LineProtocolMessageBuilder();
@@ -379,15 +379,15 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                                         ? "HTTP " + code + ": "
                                         : "")
                                         + StringUtils.substring(
-                                        StringUtils.firstNonEmpty(
-                                                sampleResult.getFirstAssertionFailureMessage(),
-                                                sampleResult.getResponseMessage(),
-                                                code,
-                                                NOT_AVAILABLE
-                                        ),
-                                        0,
-                                        MAX_CHARS_IN_MSG
-                                )
+                                                StringUtils.firstNonEmpty(
+                                                        sampleResult.getFirstAssertionFailureMessage(),
+                                                        sampleResult.getResponseMessage(),
+                                                        code,
+                                                        NOT_AVAILABLE
+                                                ),
+                                                0,
+                                                MAX_CHARS_IN_MSG
+                                        )
                                         .replaceAll(MSG_ANONYMIZATION_REGEXP, MSG_ANONYMIZATION_PLACEMENT)
                         )
                         .appendLineProtocolTag(LAUNCH_TAG, launchId)
@@ -398,6 +398,20 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                         .add(1L);
             }
 
+        }
+    }
+
+    private String parseSamplerForEndpoint(SampleResult sampleResult) {
+        if (sampleResult.getURL() == null || StringUtils.isEmpty(sampleResult.getURL().getPath())) {
+            return NOT_AVAILABLE;
+        }
+
+        String anonymizedUrl = anonymizeUrl(sampleResult.getURL().getPath().replace("//", "/").trim());
+
+        if (sampleResult instanceof HTTPSampleResult) {
+            return ((HTTPSampleResult) sampleResult).getHTTPMethod() + " " + anonymizedUrl;
+        } else {
+            return anonymizedUrl;
         }
     }
 
@@ -492,7 +506,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     }
 
     private void tryToSendRequestToInflux(HttpRequest httpRequest) throws IOException, InterruptedException {
-        HttpResponse<String> response = null;
+        HttpResponse<String> response;
         try {
             response = client.send(
                     httpRequest,
