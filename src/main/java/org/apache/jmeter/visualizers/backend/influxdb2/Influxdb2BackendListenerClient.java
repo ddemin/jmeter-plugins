@@ -56,6 +56,9 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private static final Object GLOBAL_LOCK = new Object();
 
     private static final Map<String, String> DEFAULT_ARGS = new LinkedHashMap<>();
+    private static final Map<String, String> SERVICE_BY_URL = new ConcurrentHashMap<>();
+    private static final Map<String, String> SERVICE_BY_HOST = new ConcurrentHashMap<>();
+
     private static final String ARG_INFLUXDB_2_URL = "influxdb2_url";
     private static final String ARG_INFLUXDB_2_TOKEN = "influxdb2_token";
     private static final String ARG_INFLUXDB_2_ORG = "influxdb2_org";
@@ -70,6 +73,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private static final String ARG_URL_ANONYMIZE_REGEX = "url_anonymize_regex";
     private static final String ARG_ALLOWED_SAMPLERS_REGEX = "reported_samplers_regex";
     private static final String ARG_ALLOWED_VARIABLES_REGEX = "reported_variables_regex";
+    private static final String ARG_STATISTIC_MODE = "statistic_mode";
 
     private static final String LAUNCH_MEASUREMENT = "launches";
     private static final String VARIABLE_MEASUREMENT = "variables";
@@ -83,16 +87,14 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private static final String MSG_ANONYMIZATION_REGEXP = "([0-9a-zA-Z-]+-[0-9a-zA-Z-]+-[0-9a-zA-Z-]+|[0-9]+)";
     private static final String MSG_ANONYMIZATION_PLACEMENT = "X";
     private static final String NOT_AVAILABLE = "N/A";
-    public static final String JMETER_PROP_SEPARATOR = ".";
+    private static final String JMETER_PROP_SEPARATOR = ".";
     private static final int MAX_CHARS_IN_MSG = 256;
 
     private static final String MEASUREMENT_BYTES = "bytes_total";
     private static final String MEASUREMENT_RESPONSE_TIME = "response_time";
     private static final String MEASUREMENT_RATE = "rate";
     private static final String MEASUREMENT_ERRORS = "errors";
-    private static final Map<String, String> SERVICE_BY_URL = new HashMap<>();
-    private static final Map<String, String> SERVICE_BY_HOST = new ConcurrentHashMap<>();
-    private static final Queue<HttpRequest> FAILED_REQUESTS_QUEUE = new ConcurrentLinkedQueue<>();
+    private static final String RAW_MEASUREMENT_FIELD = "raw";
 
     static {
         DEFAULT_ARGS.put(ARG_INFLUXDB_2_URL, "https://influxdb2_url:9999");
@@ -111,11 +113,16 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         DEFAULT_ARGS.put(ARG_URL_ANONYMIZE_REGEX, DEFAULT_URL_ANONYMIZE_REGEXP);
         DEFAULT_ARGS.put(ARG_ALLOWED_SAMPLERS_REGEX, ".*");
         DEFAULT_ARGS.put(ARG_ALLOWED_VARIABLES_REGEX, "NOTHING");
+        DEFAULT_ARGS.put(ARG_STATISTIC_MODE, "true");
     }
 
+    private final Object localLock = new Object();
+
     private final SortedMap<String, String> eventsTagsMap = new TreeMap<>();
+
     private final ConcurrentHashMap<String, Boolean> labelsWhiteList = new ConcurrentHashMap<>();
-    private final HashMap<String, HashMap<String, Statistic>> metricsBuffer = new HashMap<>();
+    private final ConcurrentHashMap<String, HashMap<String, Statistic>> metricsBuffer = new ConcurrentHashMap<>();
+    private final Queue<HttpRequest> failedRequestsQueue = new ConcurrentLinkedQueue<>();
 
     private LineProtocolMessageBuilder lineProtocolMessageBuilder;
     private String launchId;
@@ -124,6 +131,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     private String variablesRegex;
     private Pattern samplersToFilter;
     private Pattern variablesToFilter;
+    private boolean isStatisticMode;
     private boolean isDestroyed;
 
     private ScheduledExecutorService scheduler;
@@ -143,9 +151,10 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     @Override
     public void run() {
         sendMeasurements();
+
         List<HttpRequest> failedRepeatedReqs = new LinkedList<>();
-        while (FAILED_REQUESTS_QUEUE.peek() != null) {
-            HttpRequest request = FAILED_REQUESTS_QUEUE.poll();
+        while (failedRequestsQueue.peek() != null) {
+            HttpRequest request = failedRequestsQueue.poll();
             try {
                 // TODO Hack, prevent very frequent requests
                 Thread.sleep(1000);
@@ -154,7 +163,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                 failedRepeatedReqs.add(request);
             }
         }
-        FAILED_REQUESTS_QUEUE.addAll(failedRepeatedReqs);
+        failedRequestsQueue.addAll(failedRepeatedReqs);
     }
 
     @Override
@@ -176,6 +185,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     // TODO Make more cleaner and easy. Split to methods/classes
     @Override
     public void setupTest(BackendListenerContext context) throws Exception {
+        LOG.info("Initialize InfluxDB2 listener...");
         Runtime.getRuntime().addShutdownHook(new Thread(this::destroyInfluxDbClient));
 
         labelsWhiteList.clear();
@@ -251,6 +261,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         samplersToFilter = Pattern.compile(samplersRegex);
         variablesRegex = context.getParameter(ARG_ALLOWED_VARIABLES_REGEX, "");
         variablesToFilter = Pattern.compile(variablesRegex);
+        isStatisticMode = context.getBooleanParameter(ARG_STATISTIC_MODE, true);
 
         sendEvent(true);
         scheduler = Executors.newScheduledThreadPool(MAX_POOL_SIZE);
@@ -260,14 +271,21 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                 sendIntervalSec,
                 TimeUnit.SECONDS
         );
+
+        LOG.info("Done!");
     }
 
     @Override
     public void teardownTest(BackendListenerContext context) throws Exception {
         super.teardownTest(context);
+
+        LOG.info("Destroy InfluxDB2 listener...");
+
         labelsWhiteList.clear();
         SERVICE_BY_URL.clear();
         destroyInfluxDbClient();
+
+        LOG.info("Done!");
     }
 
     @Override
@@ -326,13 +344,11 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
     }
 
     private void saveMeasurement(SampleResult sampleResult) {
-        initServiceByHostMap();
-
-        String code = StringUtils.defaultIfEmpty(sampleResult.getResponseCode(), NOT_AVAILABLE);
-        boolean isDigitCode = NumberUtils.isDigits(code);
-
         String label = sampleResult.getSampleLabel().trim();
+        String trxName = Strings.isEmpty(label) ? NOT_AVAILABLE : label;
+
         String endpoint = parseSamplerForEndpoint(sampleResult);
+
         String host = sampleResult.getURL() == null || StringUtils.isBlank(sampleResult.getURL().getHost())
                 ? NOT_AVAILABLE
                 : sampleResult.getURL().getHost().trim().toLowerCase();
@@ -344,33 +360,52 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                         .findFirst().orElse(host)
         );
 
-        synchronized (GLOBAL_LOCK) {
-            String trxName = Strings.isEmpty(label) ? NOT_AVAILABLE : label;
-            LineProtocolMessageBuilder mainBuilder = new LineProtocolMessageBuilder();
-            String mainMeasurement = mainBuilder
-                    .appendLineProtocolTag("component", component)
-                    .appendLineProtocolTag("endpoint", endpoint.equalsIgnoreCase(NOT_AVAILABLE) ? trxName : endpoint)
-                    .appendLineProtocolTag(LAUNCH_TAG, launchId)
-                    .appendLineProtocolTag("name", trxName)
-                    .build();
+        String measurementTags = new LineProtocolMessageBuilder()
+                .appendLineProtocolTag("component", component)
+                .appendLineProtocolTag("endpoint", endpoint.equalsIgnoreCase(NOT_AVAILABLE) ? trxName : endpoint)
+                .appendLineProtocolTag(LAUNCH_TAG, launchId)
+                .appendLineProtocolTag("name", trxName)
+                .build();
 
-            HashMap<String, Statistic> fieldsValuesMap = metricsBuffer.computeIfAbsent(
-                    mainMeasurement,
-                    k -> new HashMap<>()
-            );
-            fieldsValuesMap
-                    .computeIfAbsent(MEASUREMENT_BYTES, k -> new Statistic())
-                    .add(sampleResult.getBytesAsLong() + sampleResult.getSentBytes());
-            fieldsValuesMap
-                    .computeIfAbsent(MEASUREMENT_RESPONSE_TIME, k -> new Statistic())
-                    .add(sampleResult.getTime());
-            fieldsValuesMap
-                    .computeIfAbsent(MEASUREMENT_RATE, k -> new Statistic())
-                    .add(sampleResult.isSuccessful() ? 0L : 1L);
+        synchronized (this) {
+            initServiceByHostMap();
+
+            if (isStatisticMode) {
+                HashMap<String, Statistic> fieldsValuesMap = metricsBuffer.computeIfAbsent(
+                        measurementTags,
+                        k -> new HashMap<>()
+                );
+                fieldsValuesMap
+                        .computeIfAbsent(MEASUREMENT_BYTES, k -> new Statistic())
+                        .add(sampleResult.getBytesAsLong() + sampleResult.getSentBytes());
+                fieldsValuesMap
+                        .computeIfAbsent(MEASUREMENT_RESPONSE_TIME, k -> new Statistic())
+                        .add(sampleResult.getTime());
+                fieldsValuesMap
+                        .computeIfAbsent(MEASUREMENT_RATE, k -> new Statistic())
+                        .add(sampleResult.isSuccessful() ? 0L : 1L);
+            } else {
+                lineProtocolMessageBuilder
+                        .appendLineProtocolMeasurement(MEASUREMENT_BYTES)
+                        .appendLineProtocolRawData(measurementTags)
+                        .appendLineProtocolField(RAW_MEASUREMENT_FIELD, sampleResult.getBytesAsLong() + sampleResult.getSentBytes())
+                        .appendLineProtocolTimestampNs(System.nanoTime())
+                        .appendLineProtocolMeasurement(MEASUREMENT_RESPONSE_TIME)
+                        .appendLineProtocolRawData(measurementTags)
+                        .appendLineProtocolField(RAW_MEASUREMENT_FIELD, sampleResult.getTime())
+                        .appendLineProtocolTimestampNs(System.nanoTime())
+                        .appendLineProtocolMeasurement(MEASUREMENT_RATE)
+                        .appendLineProtocolRawData(measurementTags)
+                        .appendLineProtocolField(RAW_MEASUREMENT_FIELD, sampleResult.isSuccessful() ? 0L : 1L)
+                        .appendLineProtocolTimestampNs(System.nanoTime());
+            }
 
             if (!sampleResult.isSuccessful()) {
+                String code = StringUtils.defaultIfEmpty(sampleResult.getResponseCode(), NOT_AVAILABLE);
+                boolean isDigitCode = NumberUtils.isDigits(code);
+
                 LineProtocolMessageBuilder auxBuilder = new LineProtocolMessageBuilder();
-                String auxMeasurement = auxBuilder
+                String auxMeasurementTags = auxBuilder
                         .appendLineProtocolTag("component", component)
                         .appendLineProtocolTag("endpoint", endpoint)
                         .appendLineProtocolTag(
@@ -393,9 +428,18 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                         .appendLineProtocolTag(LAUNCH_TAG, launchId)
                         .appendLineProtocolTag("name", Strings.isEmpty(label) ? NOT_AVAILABLE : label)
                         .build();
-                metricsBuffer.computeIfAbsent(auxMeasurement, k -> new HashMap<>())
-                        .computeIfAbsent(MEASUREMENT_ERRORS, k -> new Statistic())
-                        .add(1L);
+
+                if (isStatisticMode) {
+                    metricsBuffer
+                            .computeIfAbsent(auxMeasurementTags, k -> new HashMap<>())
+                            .computeIfAbsent(MEASUREMENT_ERRORS, k -> new Statistic())
+                            .add(1L);
+                } else {
+                    lineProtocolMessageBuilder
+                            .appendLineProtocolMeasurement(MEASUREMENT_ERRORS)
+                            .appendLineProtocolRawData(auxMeasurementTags)
+                            .appendLineProtocolField(RAW_MEASUREMENT_FIELD, 1L);
+                }
             }
 
         }
@@ -415,94 +459,72 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         }
     }
 
-    // TODO refactor
-    private void initServiceByHostMap() {
-        synchronized (GLOBAL_LOCK) {
-            if (SERVICE_BY_URL.isEmpty()) {
-                // TODO This is only 1 way to define url -> component mapping
-                JMeterContextService.getContext().getProperties()
-                        .entrySet()
-                        .stream()
-                        .filter(entry -> {
-                            String key = entry.getKey().toString().toLowerCase();
-                            return key.startsWith("component.") && (key.endsWith(".url") || key.endsWith(".jdbc"));
-                        })
-                        .filter(entry -> entry.getValue() != null && !entry.getValue().toString().trim().isEmpty())
-                        .map(entry ->
-                                new AbstractMap.SimpleEntry<>(
-                                        entry.getValue().toString().trim().toLowerCase(),
-                                        StringUtils.substringBeforeLast(
-                                                StringUtils.substringAfter(entry.getKey().toString(), JMETER_PROP_SEPARATOR),
-                                                JMETER_PROP_SEPARATOR
-                                        ).toLowerCase()
-                                )
-                        )
-                        .forEach(entry -> SERVICE_BY_URL.put(entry.getKey(), entry.getValue()));
-            }
-        }
-    }
-
     private void sendMeasurements() {
-        synchronized (GLOBAL_LOCK) {
+        synchronized (this) {
             try {
-
-                long timestamp = Instant.now().toEpochMilli();
-                metricsBuffer.forEach(
-                        (tags, fields) -> {
-                            fields.forEach(
-                                    (field, stats) -> {
-                                        long n = stats.getSize();
-                                        if (n <= 0) {
-                                            return;
-                                        }
-                                        lineProtocolMessageBuilder
-                                                .appendLineProtocolMeasurement(field)
-                                                .appendLineProtocolRawData(tags);
-                                        float avg = stats.getAverage();
-                                        switch (field) {
-                                            case MEASUREMENT_RESPONSE_TIME:
-                                                lineProtocolMessageBuilder
-                                                        .appendLineProtocolField("avg", avg)
-                                                        .appendLineProtocolField("max", stats.getMax())
-                                                        .appendLineProtocolField("min", stats.getMin())
-                                                        .appendLineProtocolField("p50", stats.getPercentile(50))
-                                                        .appendLineProtocolField("p95", stats.getPercentile(95))
-                                                        .appendLineProtocolField("p99", stats.getPercentile(99));
-                                                break;
-                                            case MEASUREMENT_BYTES:
-                                                lineProtocolMessageBuilder
-                                                        .appendLineProtocolField("avg", avg);
-                                                break;
-                                            case MEASUREMENT_RATE:
-                                                lineProtocolMessageBuilder
-                                                        .appendLineProtocolField("calls", n)
-                                                        .appendLineProtocolField("rps", n / (float) sendIntervalSec)
-                                                        .appendLineProtocolField("errors", stats.getSum());
-                                                break;
-                                            case MEASUREMENT_ERRORS:
-                                                lineProtocolMessageBuilder
-                                                        .appendLineProtocolField("count", stats.getSum());
-                                                break;
-                                            default:
-                                                LOG.error("Unknown field: " + field);
-                                                return;
-                                        }
-                                        lineProtocolMessageBuilder
-                                                .appendLineProtocolTimestampNs(enrichMsTimestamp(timestamp));
-                                    }
-                            );
-                        }
-                );
-                if (lineProtocolMessageBuilder.getAddedLines() == 0) {
-                    return;
+                if (isStatisticMode) {
+                    processBatch();
                 }
-                tryToSendRequestToInflux(buildWriteRequest(influxDbMainWriteUrl, lineProtocolMessageBuilder));
+
+                if (lineProtocolMessageBuilder.getRows() > 0) {
+                    tryToSendRequestToInflux(buildWriteRequest(influxDbMainWriteUrl, lineProtocolMessageBuilder));
+                }
             } catch (Throwable tr) {
                 LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage());
             } finally {
                 cleanDataPointBuilder();
             }
         }
+    }
+
+    private void processBatch() {
+        long timestamp = Instant.now().toEpochMilli();
+        metricsBuffer.forEach(
+                (tags, measurements) -> {
+                    measurements.forEach(
+                            (measurement, stats) -> {
+                                long n = stats.getSize();
+                                if (n <= 0) {
+                                    return;
+                                }
+                                lineProtocolMessageBuilder
+                                        .appendLineProtocolMeasurement(measurement)
+                                        .appendLineProtocolRawData(tags);
+                                float avg = stats.getAverage();
+                                switch (measurement) {
+                                    case MEASUREMENT_RESPONSE_TIME:
+                                        lineProtocolMessageBuilder
+                                                .appendLineProtocolField("avg", avg)
+                                                .appendLineProtocolField("max", stats.getMax())
+                                                .appendLineProtocolField("min", stats.getMin())
+                                                .appendLineProtocolField("p50", stats.getPercentile(50))
+                                                .appendLineProtocolField("p95", stats.getPercentile(95))
+                                                .appendLineProtocolField("p99", stats.getPercentile(99));
+                                        break;
+                                    case MEASUREMENT_BYTES:
+                                        lineProtocolMessageBuilder
+                                                .appendLineProtocolField("avg", avg);
+                                        break;
+                                    case MEASUREMENT_RATE:
+                                        lineProtocolMessageBuilder
+                                                .appendLineProtocolField("calls", n)
+                                                .appendLineProtocolField("rps", n / (float) sendIntervalSec)
+                                                .appendLineProtocolField("errors", stats.getSum());
+                                        break;
+                                    case MEASUREMENT_ERRORS:
+                                        lineProtocolMessageBuilder
+                                                .appendLineProtocolField("count", stats.getSum());
+                                        break;
+                                    default:
+                                        LOG.error("Unknown field: " + measurement);
+                                        return;
+                                }
+                                lineProtocolMessageBuilder
+                                        .appendLineProtocolTimestampNs(enrichMsTimestamp(timestamp));
+                            }
+                    );
+                }
+        );
     }
 
     private void tryToSendRequestToInflux(HttpRequest httpRequest) throws IOException, InterruptedException {
@@ -513,11 +535,11 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                     HttpResponse.BodyHandlers.ofString()
             );
         } catch (SocketTimeoutException | HttpTimeoutException ex) {
-            FAILED_REQUESTS_QUEUE.add(httpRequest);
+            failedRequestsQueue.add(httpRequest);
             throw new RuntimeException(ex);
         } catch (IOException ioex) {
             if (StringUtils.isNotEmpty(ioex.getMessage()) && ioex.getMessage().contains("too many")) {
-                FAILED_REQUESTS_QUEUE.add(httpRequest);
+                failedRequestsQueue.add(httpRequest);
             }
             throw new RuntimeException(ioex);
         }
@@ -527,7 +549,7 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                     "HTTP body: " + response.body() + ", HTTP code: " + response.statusCode()
             );
         } else if (response != null && response.statusCode() >= 500) {
-            FAILED_REQUESTS_QUEUE.add(httpRequest);
+            failedRequestsQueue.add(httpRequest);
             throw new RuntimeException("HTTP 5xx response: " + response.body());
         }
     }
@@ -579,8 +601,35 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         }
     }
 
-    private void cleanDataPointBuilder() {
+    // TODO refactor
+    private void initServiceByHostMap() {
         synchronized (GLOBAL_LOCK) {
+            if (SERVICE_BY_URL.isEmpty()) {
+                // TODO This is only 1 way to define url -> component mapping
+                JMeterContextService.getContext().getProperties()
+                        .entrySet()
+                        .stream()
+                        .filter(entry -> {
+                            String key = entry.getKey().toString().toLowerCase();
+                            return key.startsWith("component.") && (key.endsWith(".url") || key.endsWith(".jdbc"));
+                        })
+                        .filter(entry -> entry.getValue() != null && !entry.getValue().toString().trim().isEmpty())
+                        .map(entry ->
+                                new AbstractMap.SimpleEntry<>(
+                                        entry.getValue().toString().trim().toLowerCase(),
+                                        StringUtils.substringBeforeLast(
+                                                StringUtils.substringAfter(entry.getKey().toString(), JMETER_PROP_SEPARATOR),
+                                                JMETER_PROP_SEPARATOR
+                                        ).toLowerCase()
+                                )
+                        )
+                        .forEach(entry -> SERVICE_BY_URL.put(entry.getKey(), entry.getValue()));
+            }
+        }
+    }
+
+    private void cleanDataPointBuilder() {
+        synchronized (this) {
             metricsBuffer.forEach((k, v) -> v.forEach((field, stat) -> stat.clear()));
             lineProtocolMessageBuilder = new LineProtocolMessageBuilder();
         }

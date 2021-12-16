@@ -10,14 +10,14 @@ public class LineProtocolMessageBuilder {
     private final StringBuilder stringBuilder = new StringBuilder();
 
     private boolean fieldAdded = false;
-    private int addedLines = 0;
+    private int rows = 0;
 
     public String build() {
         return stringBuilder.toString();
     }
 
-    public int getAddedLines() {
-        return addedLines;
+    public int getRows() {
+        return rows;
     }
 
     public LineProtocolMessageBuilder appendTags(Map<String, String> tags) {
@@ -92,7 +92,7 @@ public class LineProtocolMessageBuilder {
                 .append(nanos <= 0 ? (Instant.now().toEpochMilli() * 1_000_000) : nanos)
                 .append(CHAR_UNIX_NEW_LINE);
         fieldAdded = false;
-        addedLines++;
+        rows++;
         return this;
     }
 
