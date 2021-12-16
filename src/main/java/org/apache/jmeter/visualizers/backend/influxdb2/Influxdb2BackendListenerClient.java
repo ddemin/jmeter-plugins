@@ -171,6 +171,9 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
         if (!isReady) {
             return;
         }
+
+        initServiceByHostMap();
+
         for (SampleResult sampleResult : sampleResults) {
             boolean isAllowedLabel = labelsWhiteList.computeIfAbsent(
                     sampleResult.getSampleLabel(),
@@ -368,8 +371,6 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                 .build();
 
         synchronized (this) {
-            initServiceByHostMap();
-
             if (isStatisticMode) {
                 HashMap<String, Statistic> fieldsValuesMap = metricsBuffer.computeIfAbsent(
                         measurementTags,
