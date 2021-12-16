@@ -394,10 +394,6 @@ public class Influxdb2BackendListenerClient extends AbstractBackendListenerClien
                         .appendLineProtocolMeasurement(MEASUREMENT_RESPONSE_TIME)
                         .appendLineProtocolRawData(measurementTags)
                         .appendLineProtocolField(RAW_MEASUREMENT_FIELD, sampleResult.getTime())
-                        .appendLineProtocolTimestampNs(System.nanoTime())
-                        .appendLineProtocolMeasurement(MEASUREMENT_RATE)
-                        .appendLineProtocolRawData(measurementTags)
-                        .appendLineProtocolField(RAW_MEASUREMENT_FIELD, sampleResult.isSuccessful() ? 0L : 1L)
                         .appendLineProtocolTimestampNs(System.nanoTime());
             }
 
