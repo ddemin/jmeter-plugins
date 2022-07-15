@@ -2,7 +2,7 @@ package org.apache.jmeter.visualizers.backend.influxdb2;
 
 import java.util.Arrays;
 
-public class Statistic {
+public class ValuesPackage {
 
     public static int preallocated = 10_000;
 

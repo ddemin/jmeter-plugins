@@ -1,9 +1,14 @@
 package org.apache.jmeter.visualizers.backend.influxdb2;
 
+import org.apache.commons.lang3.RandomUtils;
+
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
-public class LineProtocolMessageBuilder {
+import static org.apache.jmeter.visualizers.backend.influxdb2.Utils.enrichMsTimestamp;
+
+public class LineProtocolBuilder {
 
     private static final char CHAR_UNIX_NEW_LINE = '\n';
 
@@ -11,6 +16,18 @@ public class LineProtocolMessageBuilder {
 
     private boolean fieldAdded = false;
     private int rows = 0;
+
+    public static LineProtocolBuilder withFirstRow(
+            String measurement,
+            Map<String, String> tags,
+            List<Map.Entry<String, Object>> fields
+    ) {
+        return new LineProtocolBuilder()
+                .appendLineProtocolMeasurement(measurement)
+                .appendTags(tags)
+                .appendLineProtocolFields(fields)
+                .appendLineProtocolTimestampNs(enrichMsTimestamp(Instant.now().toEpochMilli()));
+    }
 
     public String build() {
         return stringBuilder.toString();
@@ -20,12 +37,12 @@ public class LineProtocolMessageBuilder {
         return rows;
     }
 
-    public LineProtocolMessageBuilder appendTags(Map<String, String> tags) {
+    public LineProtocolBuilder appendTags(Map<String, String> tags) {
         tags.forEach(this::appendLineProtocolTag);
         return this;
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolMeasurement(String measurement) {
+    public LineProtocolBuilder appendLineProtocolMeasurement(String measurement) {
         return appendLineProtocolRawData(
                 measurement
                         .replace(" ", "\\ ")
@@ -34,7 +51,7 @@ public class LineProtocolMessageBuilder {
         );
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolTag(String key, String value) {
+    public LineProtocolBuilder appendLineProtocolTag(String key, String value) {
         appendLineProtocolItemDelimiter();
         appendLineProtocolRawData(
                 key
@@ -52,7 +69,33 @@ public class LineProtocolMessageBuilder {
         );
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolField(String key, String value) {
+    public LineProtocolBuilder appendLineProtocolFields(List<Map.Entry<String, Object>> fields) {
+        fields.forEach(
+                fl -> appendLineProtocolField(fl.getKey(), fl.getValue())
+        );
+
+        return this;
+    }
+
+    public LineProtocolBuilder appendLineProtocolField(String key, Object value) {
+        if (value instanceof Integer) {
+            appendLineProtocolField(key, ((Integer) value).intValue());
+        } else if (value instanceof Float) {
+            appendLineProtocolField(key, ((Float) value).floatValue());
+
+        } else if (value instanceof Double) {
+            appendLineProtocolField(key, ((Double) value).doubleValue());
+
+        } else if (value instanceof Boolean) {
+            appendLineProtocolField(key, ((Boolean) value).booleanValue());
+        } else {
+            appendLineProtocolField(key, String.valueOf(value));
+        }
+
+        return this;
+    }
+
+    public LineProtocolBuilder appendLineProtocolField(String key, String value) {
         calculateAndAppendFieldDelimiter();
         return appendLineProtocolKeyValue(
                 key
@@ -66,27 +109,27 @@ public class LineProtocolMessageBuilder {
         );
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolField(String key, int value) {
+    public LineProtocolBuilder appendLineProtocolField(String key, int value) {
         calculateAndAppendFieldDelimiter();
         return appendLineProtocolKeyValue(key, value);
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolField(String key, float value) {
+    public LineProtocolBuilder appendLineProtocolField(String key, float value) {
         calculateAndAppendFieldDelimiter();
         return appendLineProtocolKeyValue(key, value);
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolField(String key, double value) {
+    public LineProtocolBuilder appendLineProtocolField(String key, double value) {
         calculateAndAppendFieldDelimiter();
         return appendLineProtocolKeyValue(key, value);
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolField(String key, boolean value) {
+    public LineProtocolBuilder appendLineProtocolField(String key, boolean value) {
         calculateAndAppendFieldDelimiter();
         return appendLineProtocolKeyValue(key, value);
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolTimestampNs(long nanos) {
+    public LineProtocolBuilder appendLineProtocolTimestampNs(long nanos) {
         appendLineProtocolDelimiter();
         stringBuilder
                 .append(nanos <= 0 ? (Instant.now().toEpochMilli() * 1_000_000) : nanos)
@@ -105,27 +148,27 @@ public class LineProtocolMessageBuilder {
         fieldAdded = true;
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolItemDelimiter() {
+    public LineProtocolBuilder appendLineProtocolItemDelimiter() {
         stringBuilder.append(',');
         return this;
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolRawData(String data) {
+    public LineProtocolBuilder appendLineProtocolRawData(String data) {
         stringBuilder.append(data);
         return this;
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolDelimiter() {
+    public LineProtocolBuilder appendLineProtocolDelimiter() {
         stringBuilder.append(' ');
         return this;
     }
 
-    public LineProtocolMessageBuilder appendKeyValueDelimiter() {
+    public LineProtocolBuilder appendKeyValueDelimiter() {
         stringBuilder.append('=');
         return this;
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolKeyValue(String key, String value) {
+    public LineProtocolBuilder appendLineProtocolKeyValue(String key, String value) {
         stringBuilder
                 .append(key)
                 .append('=')
@@ -135,7 +178,7 @@ public class LineProtocolMessageBuilder {
         return this;
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolKeyValue(String key, int value) {
+    public LineProtocolBuilder appendLineProtocolKeyValue(String key, int value) {
         stringBuilder
                 .append(key)
                 .append('=')
@@ -144,7 +187,7 @@ public class LineProtocolMessageBuilder {
         return this;
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolKeyValue(String key, float value) {
+    public LineProtocolBuilder appendLineProtocolKeyValue(String key, float value) {
         stringBuilder
                 .append(key)
                 .append('=')
@@ -152,7 +195,7 @@ public class LineProtocolMessageBuilder {
         return this;
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolKeyValue(String key, double value) {
+    public LineProtocolBuilder appendLineProtocolKeyValue(String key, double value) {
         stringBuilder
                 .append(key)
                 .append('=')
@@ -160,7 +203,7 @@ public class LineProtocolMessageBuilder {
         return this;
     }
 
-    public LineProtocolMessageBuilder appendLineProtocolKeyValue(String key, boolean value) {
+    public LineProtocolBuilder appendLineProtocolKeyValue(String key, boolean value) {
         stringBuilder
                 .append(key)
                 .append('=')
