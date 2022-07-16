@@ -24,6 +24,7 @@ public class InfluxHttpClient {
     private final String tokenHeader;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(10))
             .build();
     private final Map<String, URI> uriCache = new ConcurrentHashMap<>();
     private boolean isConnected;
@@ -32,11 +33,12 @@ public class InfluxHttpClient {
         this.url = StringUtils.removeEnd(url.trim(), "/");
         this.org = org;
         this.tokenHeader = "Token " + token;
-
         this.isConnected = tryToConnect();
     }
 
     public boolean tryToSend(String bucket, String lineProtocolContent) throws InterruptedException {
+        LOG.debug("Try to build HTTP request");
+
         HttpRequest httpRequest = buildWriteRequest(bucket, lineProtocolContent);
         return tryToSend(httpRequest);
     }
@@ -44,6 +46,7 @@ public class InfluxHttpClient {
     public boolean isConnected() {
         return isConnected;
     }
+
     private boolean tryToConnect() {
         HttpRequest authRequest = HttpRequest.newBuilder()
                 .GET()
@@ -73,13 +76,16 @@ public class InfluxHttpClient {
             return false;
         }
     }
+
     private boolean tryToSend(HttpRequest httpRequest) throws InterruptedException {
         HttpResponse<String> response;
         try {
+            LOG.debug("Try to send HTTP request: " + httpRequest.toString());
             response = httpClient.send(
                     httpRequest,
                     HttpResponse.BodyHandlers.ofString()
             );
+            LOG.debug("HTTP request was send");
         } catch (SocketTimeoutException | HttpTimeoutException ex) {
             LOG.error("Can't send metric to InfluxDB", ex);
             return false;
@@ -107,14 +113,15 @@ public class InfluxHttpClient {
         return HttpRequest.newBuilder()
                 .uri(
                         uriCache.computeIfAbsent(
-                                bucket, k ->
-                                    URI.create(
-                                            url
-                                                    + "/api/v2/write?"
-                                                    + "org=" + org
-                                                    + "&bucket=" + bucket
-                                                    + "&precision=ns"
-                                    )
+                                bucket,
+                                k ->
+                                        URI.create(
+                                                url
+                                                        + "/api/v2/write?"
+                                                        + "org=" + org
+                                                        + "&bucket=" + bucket
+                                                        + "&precision=ns"
+                                        )
                         )
                 )
                 .timeout(Duration.ofSeconds(5))

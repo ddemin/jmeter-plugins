@@ -22,8 +22,8 @@ public class LineProtocolBuffer {
     private static final String MSG_ANONYMIZATION_PLACEMENT = "X";
     private static final int MAX_CHARS_IN_MSG = 256;
 
-    private static final String MEASUREMENT_BYTES = "bytes_total";
-    private static final String MEASUREMENT_RESPONSE_TIME = "response_time";
+    private static final String MEASUREMENT_BYTES = "network_bytes";
+    private static final String MEASUREMENT_RESPONSE_TIME = "latency_ms";
     private static final String MEASUREMENT_RATE = "rate";
     private static final String MEASUREMENT_ERRORS = "errors";
     private static final String RAW_MEASUREMENT_FIELD = "raw";
@@ -44,6 +44,7 @@ public class LineProtocolBuffer {
         this.isStatisticMode = isStatisticMode;
         this.launchId = launchId;
         this.sendIntervalSec = sendIntervalSec;
+        this.lineProtocolMessageBuilder = new LineProtocolBuilder();
     }
 
     public String packLaunchEvent(
@@ -57,24 +58,26 @@ public class LineProtocolBuffer {
         LineProtocolBuilder builder;
 
         if (isTestStarted) {
-            Set<Map.Entry<String, Object>> variableSet = new HashSet<>(
-                    JMeterContextService
-                            .getContext()
-                            .getVariables()
-                            .entrySet()
-            );
-            variableSet.add(new AbstractMap.SimpleEntry<>(FIELD_THREADS, JMeterContextService.getTotalThreads() + 0.0f));
-            variableSet.add(new AbstractMap.SimpleEntry<>("scenario", scenario));
-            variableSet.add(new AbstractMap.SimpleEntry<>("version", version));
-            variableSet.add(new AbstractMap.SimpleEntry<>("details", details));
-
-            List<Map.Entry<String, Object>> filteredAndSortedVariables = variableSet.stream()
+            Set<Map.Entry<String, Object>> variableSet = JMeterContextService
+                    .getContext()
+                    .getVariables()
+                    .entrySet()
+                    .stream()
                     .filter(entry -> entry.getValue() != null)
                     .filter(entry ->
                             variablesFilter
                                     .matcher(String.valueOf(entry.getKey()))
                                     .find()
-                    )
+                    ).collect(Collectors.toSet());
+
+            // Mandatory fields
+            variableSet.add(new AbstractMap.SimpleEntry<>(FIELD_THREADS, JMeterContextService.getTotalThreads() + 0.0f));
+            variableSet.add(new AbstractMap.SimpleEntry<>("scenario", scenario));
+            variableSet.add(new AbstractMap.SimpleEntry<>("version", version));
+            variableSet.add(new AbstractMap.SimpleEntry<>("details", details));
+
+            List<Map.Entry<String, Object>> filteredAndSortedVariables = variableSet
+                    .stream()
                     .sorted(Map.Entry.comparingByKey())
                     .collect(Collectors.toList());
 
@@ -99,6 +102,22 @@ public class LineProtocolBuffer {
         String label = sampleResult.getSampleLabel().trim().toLowerCase();
         String trx = StringUtils.substringAfter(label, ":").trim();
         String component = StringUtils.substringBefore(label, ":").trim();
+
+        if (StringUtils.isEmpty(component)) {
+            throw new IllegalArgumentException(
+                    "Component tag can't be empty! "
+                            + "Please follow next template for JMeter sampler name/label: "
+                            + "{COMPONENT}: {Any text as transaction name}"
+            );
+        }
+
+        if (StringUtils.isEmpty(trx)) {
+            throw new IllegalArgumentException(
+                    "Trx tag can't be empty! "
+                            + "Please follow next template for JMeter sampler name/label: "
+                            + "{Component name}: {Any text as transaction name}"
+            );
+        }
 
         String measurementTags = buildMeasurementTags(component, launchId, trx);
 
@@ -216,9 +235,8 @@ public class LineProtocolBuffer {
                                         break;
                                     case MEASUREMENT_RATE:
                                         lineProtocolMessageBuilder
-                                                .appendLineProtocolField("calls", n)
-                                                .appendLineProtocolField("rps", n / (float) sendIntervalSec)
-                                                .appendLineProtocolField("errors", stats.getSum());
+                                                .appendLineProtocolField("load_tps", n / (float) sendIntervalSec)
+                                                .appendLineProtocolField("error_share", stats.getSum() / (float) n);
                                         break;
                                     case MEASUREMENT_ERRORS:
                                         lineProtocolMessageBuilder

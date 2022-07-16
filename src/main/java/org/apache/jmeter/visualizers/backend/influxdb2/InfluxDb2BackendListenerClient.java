@@ -43,7 +43,8 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
 
     private static final Logger LOG = LoggerFactory.getLogger(InfluxDb2BackendListenerClient.class);
     private static final int MAX_POOL_SIZE = 1;
-    private static final int DEFAULT_SEND_INTERVAL = 10;
+    private static final int MAX_RETRY_ATTEMPTS = 5;
+    private static final int DEFAULT_SEND_INTERVAL = 30;
     private static final Map<String, String> DEFAULT_ARGS = new LinkedHashMap<>();
 
     private static final String ARG_INFLUXDB_2_URL = "influxdb2_url";
@@ -112,18 +113,22 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     public void run() {
         sendMeasurements();
 
-        List<Map.Entry<String, String>> failedRepeatedReqs = new LinkedList<>();
-        while (retryQueue.peek() != null) {
-            Map.Entry<String, String> dataForBucket = retryQueue.poll();
+        int attempts = 0;
+        while (retryQueue.peek() != null && attempts <= MAX_RETRY_ATTEMPTS) {
+            Map.Entry<String, String> dataForBucket = retryQueue.peek();
             try {
                 // TODO Hack, prevent very frequent requests
-                Thread.sleep(1000);
+                Thread.sleep(1000 * attempts);
                 tryToSend(dataForBucket.getKey(), dataForBucket.getValue());
+                retryQueue.poll();
             } catch (IOException | InterruptedException e) {
-                failedRepeatedReqs.add(dataForBucket);
+                attempts++;
             }
         }
-        retryQueue.addAll(failedRepeatedReqs);
+
+        if (attempts == MAX_RETRY_ATTEMPTS) {
+            LOG.error("Couldn't send data to InfluxDB after max retry attempts: " + MAX_RETRY_ATTEMPTS);
+        }
     }
 
     @Override
@@ -144,13 +149,15 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     }
 
     @Override
-    public void setupTest(BackendListenerContext context) {
+    public void setupTest(BackendListenerContext context) throws Exception {
+        super.setupTest(context);
+
         LOG.info("Initialize InfluxDB2 listener...");
         Runtime.getRuntime().addShutdownHook(new Thread(this::cleanUpAndReset));
 
         this.context = context;
 
-        this.bucketMeta = context.getParameter(ARG_INFLUXDB_2_BUCKET_TRX);
+        this.bucketMeta = context.getParameter(ARG_INFLUXDB_2_BUCKET_META);
         this.bucketMetrics = context.getParameter(ARG_INFLUXDB_2_BUCKET_TRX);
         this.samplersFilter = Pattern.compile(context.getParameter(ARG_ALLOWED_SAMPLERS_REGEX, ""));
         this.buffer = new LineProtocolBuffer(
@@ -173,6 +180,7 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
         } else {
             LOG.error("Initialization failed. Please check the logs");
         }
+
     }
 
     @Override
@@ -192,6 +200,9 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
 
     private void start() {
         sendLaunchEvent(true);
+
+        LOG.info("Launch event was send successfully. Initialize metrics sender scheduler...");
+
         this.scheduler = Executors.newScheduledThreadPool(MAX_POOL_SIZE);
         this.timerHandle = scheduler.scheduleAtFixedRate(
                 this,
@@ -202,34 +213,36 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     }
 
     private void cleanUpAndReset() {
-        if (!isReady) {
-            return;
-        }
-
         try {
-            timerHandle.cancel(false);
-            if (scheduler != null) {
-                scheduler.shutdown();
-                try {
-                    scheduler.awaitTermination(60, TimeUnit.SECONDS);
-                } catch (InterruptedException e) {
-                    LOG.error("Error waiting for end of scheduler");
-                    Thread.currentThread().interrupt();
+            if (timerHandle != null) {
+                timerHandle.cancel(false);
+                if (scheduler != null) {
+                    scheduler.shutdown();
+                    try {
+                        scheduler.awaitTermination(300, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        LOG.error("Error waiting for end of scheduler");
+                        Thread.currentThread().interrupt();
+                    }
                 }
             }
         } catch (Throwable tr) {
-            LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage());
+            LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage(), tr);
         }
 
         try {
-            // TODO
-            Thread.sleep(10_000);
-            sendLaunchEvent(false);
-            sendMeasurements();
+            if (influxClient.isConnected()) {
+                // TODO
+                Thread.sleep(10_000);
+                sendLaunchEvent(false);
+                sendMeasurements();
+            }
         } catch (Throwable tr) {
-            LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage());
+            LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage(), tr);
         } finally {
             labelsWhiteListCache.clear();
+            buffer = null;
+            influxClient = null;
             isReady = false;
         }
     }
@@ -242,7 +255,7 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
                     tryToSend(bucketMetrics, lineProtocolData);
                 }
             } catch (Throwable tr) {
-                LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage());
+                LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage(), tr);
             }
         }
     }
@@ -253,10 +266,10 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
 
             launchDefaultTags.put(TAG_ROOT, context.getParameter(ARG_ROOT_ID));
             launchDefaultTags.put(TAG_LAUNCH, context.getParameter(ARG_LAUNCH_ID));
-            launchDefaultTags.put("environment", context.getParameter(ARG_ENV, NOT_AVAILABLE));
+            launchDefaultTags.put("environment", context.getParameter(ARG_ENV, NOT_AVAILABLE).trim().toLowerCase());
             launchDefaultTags.put("interval", context.getParameter(ARG_INTERVAL_SEC));
-            launchDefaultTags.put("host", InetAddress.getLocalHost().getHostName());
-            launchDefaultTags.put("profile", context.getParameter(ARG_PROFILE, NOT_AVAILABLE));
+            launchDefaultTags.put("host", InetAddress.getLocalHost().getHostName().trim().toLowerCase());
+            launchDefaultTags.put("profile", context.getParameter(ARG_PROFILE, NOT_AVAILABLE).trim().toLowerCase());
             launchDefaultTags.put(TAG_STARTED, String.valueOf(isTestStarted));
 
             List<String> additionalTagsEntries
@@ -270,23 +283,25 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
                     }
             );
 
-            String launchEven = buffer.packLaunchEvent(
+            String launchEvent = buffer.packLaunchEvent(
                     isTestStarted,
                     launchDefaultTags,
-                    context.getParameter(ARG_SCENARIO, NOT_AVAILABLE),
-                    context.getParameter(ARG_VERSION, NOT_AVAILABLE),
-                    context.getParameter(ARG_DETAILS, NOT_AVAILABLE),
+                    context.getParameter(ARG_SCENARIO, NOT_AVAILABLE).trim().toLowerCase(),
+                    context.getParameter(ARG_VERSION, NOT_AVAILABLE).trim().toLowerCase(),
+                    context.getParameter(ARG_DETAILS, NOT_AVAILABLE).trim().toLowerCase(),
                     Pattern.compile(context.getParameter(ARG_ALLOWED_VARIABLES_REGEX, ""))
             );
 
-            tryToSend(bucketMeta, launchEven);
+            tryToSend(bucketMeta, launchEvent);
         } catch (Throwable tr) {
-            LOG.error("Something goes wrong during InfluxDB events write operation: " + tr.getMessage());
+            LOG.error("Something goes wrong during InfluxDB events write operation: " + tr.getMessage(), tr);
         }
 
     }
 
     private void tryToSend(String bucket, String content) throws IOException, InterruptedException {
+        LOG.debug("Prepared line protocol message: " + content);
+
         if (!influxClient.tryToSend(bucket, content)) {
             retryQueue.add(new SimpleEntry<>(bucket, content));
         }
