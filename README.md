@@ -1,2 +1,2 @@
-# jmeter-plugins
-The pack of new or customized JMeter plugins
+# TODO
+- REFACTORING (too ugly source code of Influxdb2BackendListenerClient.java class with main logic)
