@@ -55,7 +55,6 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     private static final String ARG_INTERVAL_SEC = "send_interval_sec";
     private static final String ARG_ROOT_ID = "root_uuid";
     private static final String ARG_LAUNCH_ID = "launch_uuid";
-    private static final String ARG_ENV = "environment_name";
     private static final String ARG_SCENARIO = "load_scenario_name";
     private static final String ARG_VERSION = "env_version";
     private static final String ARG_DETAILS = "env_details";
@@ -78,7 +77,6 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
 
         DEFAULT_ARGS.put(ARG_ROOT_ID, "${__UUID()}");
         DEFAULT_ARGS.put(ARG_LAUNCH_ID, "${__UUID()}");
-        DEFAULT_ARGS.put(ARG_ENV, "Environment name");
         DEFAULT_ARGS.put(ARG_PROFILE, "Load profile name");
         DEFAULT_ARGS.put(ARG_SCENARIO, "JMeter test/scenario name");
         DEFAULT_ARGS.put(ARG_VERSION, "N/A");
@@ -266,7 +264,6 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
 
             launchDefaultTags.put(TAG_ROOT, context.getParameter(ARG_ROOT_ID));
             launchDefaultTags.put(TAG_LAUNCH, context.getParameter(ARG_LAUNCH_ID));
-            launchDefaultTags.put("environment", context.getParameter(ARG_ENV, NOT_AVAILABLE).trim().toLowerCase());
             launchDefaultTags.put("interval", context.getParameter(ARG_INTERVAL_SEC));
             launchDefaultTags.put("host", InetAddress.getLocalHost().getHostName().trim().toLowerCase());
             launchDefaultTags.put("profile", context.getParameter(ARG_PROFILE, NOT_AVAILABLE).trim().toLowerCase());
