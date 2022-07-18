@@ -30,8 +30,8 @@ public class LineProtocolBuffer {
     private static final String MEASUREMENT_LAUNCHES = "launches";
     private static final String MEASUREMENT_VARIABLES = "variables";
     public static final String TAG_COMPONENT = "component";
-    public static final String FIELD_THREADS = "threads";
     public static final String FIELD_TRX = "trx";
+    public static final String TAG_INTERVAL = "interval";
 
     private final boolean isStatisticMode;
     private final String launchId;
@@ -55,7 +55,13 @@ public class LineProtocolBuffer {
             String details,
             Pattern variablesFilter
     ) {
-        LineProtocolBuilder builder;
+        tags.put(TAG_INTERVAL, String.valueOf(sendIntervalSec));
+
+        LineProtocolBuilder builder = LineProtocolBuilder.withFirstRow(
+                MEASUREMENT_LAUNCHES,
+                tags,
+                List.of(new AbstractMap.SimpleEntry<>(TAG_LAUNCH, launchId))
+        );
 
         if (isTestStarted) {
             Set<Map.Entry<String, Object>> variableSet = JMeterContextService
@@ -71,7 +77,6 @@ public class LineProtocolBuffer {
                     ).collect(Collectors.toSet());
 
             // Mandatory fields
-            variableSet.add(new AbstractMap.SimpleEntry<>(FIELD_THREADS, JMeterContextService.getTotalThreads() + 0.0f));
             variableSet.add(new AbstractMap.SimpleEntry<>("scenario", scenario));
             variableSet.add(new AbstractMap.SimpleEntry<>("version", version));
             variableSet.add(new AbstractMap.SimpleEntry<>("details", details));
@@ -81,18 +86,11 @@ public class LineProtocolBuffer {
                     .sorted(Map.Entry.comparingByKey())
                     .collect(Collectors.toList());
 
-            builder = LineProtocolBuilder.withFirstRow(
+            builder.appendRow(
                     MEASUREMENT_VARIABLES,
                     Map.of(TAG_LAUNCH, launchId),
                     filteredAndSortedVariables
             );
-        } else {
-            builder = LineProtocolBuilder
-                    .withFirstRow(
-                            MEASUREMENT_LAUNCHES,
-                            tags,
-                            List.of(new AbstractMap.SimpleEntry<>(FIELD_THREADS, JMeterContextService.getTotalThreads() + 0.0f))
-                    );
         }
 
         return builder.build();
@@ -192,7 +190,7 @@ public class LineProtocolBuffer {
         }
     }
 
-    public String packMeasurements() {
+    public String pollPackedMeasurements() {
         try {
             if (isStatisticMode) {
                 processMeasurementsBatch();
@@ -255,7 +253,7 @@ public class LineProtocolBuffer {
     }
 
     private void reset() {
-        synchronized(this) {
+        synchronized (this) {
             metricsBuffer.forEach((k, v) -> v.forEach((field, stat) -> stat.clear()));
             lineProtocolMessageBuilder = new LineProtocolBuilder();
         }

@@ -37,6 +37,18 @@ public class LineProtocolBuilder {
         return rows;
     }
 
+    public LineProtocolBuilder appendRow(
+            String measurement,
+            Map<String, String> tags,
+            List<Map.Entry<String, Object>> fields
+    ) {
+        return this
+                .appendLineProtocolMeasurement(measurement)
+                .appendTags(tags)
+                .appendLineProtocolFields(fields)
+                .appendLineProtocolTimestampNs(enrichMsTimestamp(Instant.now().toEpochMilli()));
+    }
+
     public LineProtocolBuilder appendTags(Map<String, String> tags) {
         tags.forEach(this::appendLineProtocolTag);
         return this;
@@ -82,10 +94,8 @@ public class LineProtocolBuilder {
             appendLineProtocolField(key, ((Integer) value).intValue());
         } else if (value instanceof Float) {
             appendLineProtocolField(key, ((Float) value).floatValue());
-
         } else if (value instanceof Double) {
             appendLineProtocolField(key, ((Double) value).doubleValue());
-
         } else if (value instanceof Boolean) {
             appendLineProtocolField(key, ((Boolean) value).booleanValue());
         } else {

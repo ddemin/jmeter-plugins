@@ -183,10 +183,13 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
 
     @Override
     public void teardownTest(BackendListenerContext context) throws Exception {
-        super.teardownTest(context);
         LOG.info("Destroy InfluxDB2 listener...");
+
         cleanUpAndReset();
+
         LOG.info("Done!");
+
+        super.teardownTest(context);
     }
 
     @Override
@@ -239,6 +242,8 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
             LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage(), tr);
         } finally {
             labelsWhiteListCache.clear();
+            timerHandle = null;
+            scheduler = null;
             buffer = null;
             influxClient = null;
             isReady = false;
@@ -248,7 +253,7 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     private void sendMeasurements() {
         synchronized (this) {
             try {
-                String lineProtocolData = buffer.packMeasurements();
+                String lineProtocolData = buffer.pollPackedMeasurements();
                 if (Strings.isNotBlank(lineProtocolData)) {
                     tryToSend(bucketMetrics, lineProtocolData);
                 }
@@ -263,8 +268,6 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
             SortedMap<String, String> launchDefaultTags = new TreeMap<>();
 
             launchDefaultTags.put(TAG_ROOT, context.getParameter(ARG_ROOT_ID));
-            launchDefaultTags.put(TAG_LAUNCH, context.getParameter(ARG_LAUNCH_ID));
-            launchDefaultTags.put("interval", context.getParameter(ARG_INTERVAL_SEC));
             launchDefaultTags.put("host", InetAddress.getLocalHost().getHostName().trim().toLowerCase());
             launchDefaultTags.put("profile", context.getParameter(ARG_PROFILE, NOT_AVAILABLE).trim().toLowerCase());
             launchDefaultTags.put(TAG_STARTED, String.valueOf(isTestStarted));
@@ -288,6 +291,8 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
                     context.getParameter(ARG_DETAILS, NOT_AVAILABLE).trim().toLowerCase(),
                     Pattern.compile(context.getParameter(ARG_ALLOWED_VARIABLES_REGEX, ""))
             );
+
+            LOG.info("Prepared event message: " + launchEvent);
 
             tryToSend(bucketMeta, launchEvent);
         } catch (Throwable tr) {
