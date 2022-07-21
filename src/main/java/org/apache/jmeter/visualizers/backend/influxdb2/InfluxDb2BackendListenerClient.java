@@ -17,8 +17,10 @@
 
 package org.apache.jmeter.visualizers.backend.influxdb2;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.samplers.SampleResult;
+import org.apache.jmeter.threads.JMeterContextService;
 import org.apache.jmeter.visualizers.backend.AbstractBackendListenerClient;
 import org.apache.jmeter.visualizers.backend.BackendListenerContext;
 import org.apache.logging.log4j.util.Strings;
@@ -56,7 +58,8 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     private static final String ARG_ROOT_ID = "root_uuid";
     private static final String ARG_LAUNCH_ID = "launch_uuid";
     private static final String ARG_SCENARIO = "load_scenario_name";
-    private static final String ARG_VERSION = "env_version";
+    private static final String ARG_ENV_VERSION = "env_version";
+    private static final String ARG_COMPONENT_VERSION_PROP = "component_version_prop_name";
     private static final String ARG_DETAILS = "env_details";
     private static final String ARG_PROFILE = "load_profile_name";
     private static final String ARG_TAGS = "additional_meta_tags";
@@ -79,7 +82,11 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
         DEFAULT_ARGS.put(ARG_LAUNCH_ID, "${__UUID()}");
         DEFAULT_ARGS.put(ARG_PROFILE, "Load profile name");
         DEFAULT_ARGS.put(ARG_SCENARIO, "JMeter test/scenario name");
-        DEFAULT_ARGS.put(ARG_VERSION, "N/A");
+        DEFAULT_ARGS.put(ARG_ENV_VERSION, "N/A");
+        DEFAULT_ARGS.put(
+                ARG_COMPONENT_VERSION_PROP,
+                "Property name that contains versions (component1: version,component2: version"
+        );
         DEFAULT_ARGS.put(ARG_DETAILS, "N/A");
         DEFAULT_ARGS.put(ARG_TAGS, "");
 
@@ -102,6 +109,9 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     private String bucketMetrics;
     private LineProtocolBuffer buffer;
     private BackendListenerContext context;
+    private String versionPropName;
+    private volatile boolean versionsWereSend;
+    private String componentsVersion;
 
     public InfluxDb2BackendListenerClient() {
         super();
@@ -109,6 +119,12 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
 
     @Override
     public void run() {
+        if (!versionsWereSend && isComponentVersionsDefined()) {
+            LOG.info("Property with components versions is defined. Send versions...");
+            sendLaunchComponentVersions();
+            versionsWereSend = true;
+        }
+
         sendMeasurements();
 
         int attempts = 0;
@@ -164,6 +180,7 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
                 context.getIntParameter(ARG_INTERVAL_SEC)
         );
 
+        this.versionPropName = context.getParameter(ARG_COMPONENT_VERSION_PROP);
 
         this.influxClient = new InfluxHttpClient(
                 context.getParameter(ARG_INFLUXDB_2_URL),
@@ -200,8 +217,7 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     }
 
     private void start() {
-        sendLaunchEvent(true);
-
+        sendLaunchMetadata(true);
         LOG.info("Launch event was send successfully. Initialize metrics sender scheduler...");
 
         this.scheduler = Executors.newScheduledThreadPool(MAX_POOL_SIZE);
@@ -235,7 +251,7 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
             if (influxClient.isConnected()) {
                 // TODO
                 Thread.sleep(10_000);
-                sendLaunchEvent(false);
+                sendLaunchMetadata(false);
                 sendMeasurements();
             }
         } catch (Throwable tr) {
@@ -247,6 +263,7 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
             buffer = null;
             influxClient = null;
             isReady = false;
+            versionsWereSend = false;
         }
     }
 
@@ -263,7 +280,16 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
         }
     }
 
-    private void sendLaunchEvent(boolean isTestStarted) {
+    private void sendLaunchComponentVersions() {
+        try {
+            String versionsMessage = buffer.packLaunchVersions(componentsVersion);
+            tryToSend(bucketMeta, versionsMessage);
+        } catch (Throwable tr) {
+            LOG.error("Something goes wrong during InfluxDB versions write operation: " + tr.getMessage(), tr);
+        }
+    }
+
+    private void sendLaunchMetadata(boolean isTestStarted) {
         try {
             SortedMap<String, String> launchDefaultTags = new TreeMap<>();
 
@@ -283,11 +309,11 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
                     }
             );
 
-            String launchEvent = buffer.packLaunchEvent(
+            String launchEvent = buffer.packLaunchMetadata(
                     isTestStarted,
                     launchDefaultTags,
                     context.getParameter(ARG_SCENARIO, NOT_AVAILABLE).trim().toLowerCase(),
-                    context.getParameter(ARG_VERSION, NOT_AVAILABLE).trim().toLowerCase(),
+                    context.getParameter(ARG_ENV_VERSION, NOT_AVAILABLE).trim().toLowerCase(),
                     context.getParameter(ARG_DETAILS, NOT_AVAILABLE).trim().toLowerCase(),
                     Pattern.compile(context.getParameter(ARG_ALLOWED_VARIABLES_REGEX, ""))
             );
@@ -307,6 +333,13 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
         if (!influxClient.tryToSend(bucket, content)) {
             retryQueue.add(new SimpleEntry<>(bucket, content));
         }
+    }
+
+    private boolean isComponentVersionsDefined() {
+        componentsVersion = JMeterContextService.getContext().getProperties().getProperty(
+                context.getParameter(ARG_COMPONENT_VERSION_PROP)
+        );
+        return StringUtils.isNotEmpty(componentsVersion) && componentsVersion.contains(DELIMITER_COMPONENT_VERSION);
     }
 
 }

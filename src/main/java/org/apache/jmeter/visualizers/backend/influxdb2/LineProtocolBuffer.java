@@ -28,6 +28,7 @@ public class LineProtocolBuffer {
     private static final String MEASUREMENT_ERRORS = "errors";
     private static final String RAW_MEASUREMENT_FIELD = "raw";
     private static final String MEASUREMENT_LAUNCHES = "launches";
+    private static final String MEASUREMENT_VERSIONS = "versions";
     private static final String MEASUREMENT_VARIABLES = "variables";
     public static final String TAG_COMPONENT = "component";
     public static final String FIELD_TRX = "trx";
@@ -47,11 +48,55 @@ public class LineProtocolBuffer {
         this.lineProtocolMessageBuilder = new LineProtocolBuilder();
     }
 
-    public String packLaunchEvent(
+    public String packLaunchVersions(String componentsVersions) {
+        List<Map.Entry<String, Object>> versionsByComponent = Arrays
+                .stream(componentsVersions.trim().split(DELIMITER_COMPONENT_VERSION_ITEM))
+                .filter(StringUtils::isNoneEmpty)
+                .filter(
+                        cv -> {
+                            if (cv.contains(DELIMITER_COMPONENT_VERSION)) {
+                                return true;
+                            } else {
+                                LOG.error("Incorrect component-version row: " + cv);
+                                return false;
+                            }
+                        }
+                )
+                .map(
+                        cv -> {
+                            String[] arr = cv.trim().split(DELIMITER_COMPONENT_VERSION);
+                            if (arr.length != 2) {
+                                LOG.error("Incorrect component-version row: " + cv);
+                                return null;
+                            } else if (StringUtils.isEmpty(arr[0].trim()) || StringUtils.isEmpty(arr[1].trim())) {
+                                LOG.error("Incorrect component-version row: " + cv);
+                                return null;
+                            } else {
+                                return (Map.Entry<String, Object>) new AbstractMap.SimpleEntry<String, Object>(
+                                        arr[0].trim().toLowerCase(),
+                                        arr[1].trim().toLowerCase()
+                                );
+                            }
+                        }
+                )
+                .filter(Objects::nonNull)
+                .sorted(Map.Entry.comparingByKey())
+                .toList();
+
+        LineProtocolBuilder builder = LineProtocolBuilder.withFirstRow(
+                MEASUREMENT_VERSIONS,
+                Map.of(TAG_LAUNCH, launchId),
+                versionsByComponent
+        );
+
+        return builder.build();
+    }
+
+    public String packLaunchMetadata(
             boolean isTestStarted,
             Map<String, String> tags,
             String scenario,
-            String version,
+            String envVersion,
             String details,
             Pattern variablesFilter
     ) {
@@ -78,7 +123,7 @@ public class LineProtocolBuffer {
 
             // Mandatory fields
             variableSet.add(new AbstractMap.SimpleEntry<>("scenario", scenario));
-            variableSet.add(new AbstractMap.SimpleEntry<>("version", version));
+            variableSet.add(new AbstractMap.SimpleEntry<>("version", envVersion));
             variableSet.add(new AbstractMap.SimpleEntry<>("details", details));
 
             List<Map.Entry<String, Object>> filteredAndSortedVariables = variableSet
