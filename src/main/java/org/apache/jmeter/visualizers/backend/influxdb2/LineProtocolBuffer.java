@@ -141,8 +141,8 @@ public class LineProtocolBuffer {
         return builder.build();
     }
 
-    public void putSampleResult(SampleResult sampleResult) {
-        String label = sampleResult.getSampleLabel().trim().toLowerCase();
+    public void putSampleResult(SampleResult result) {
+        String label = result.getSampleLabel().trim().toLowerCase();
         String trx = StringUtils.substringAfter(label, ":").trim();
         String component = StringUtils.substringBefore(label, ":").trim();
 
@@ -172,28 +172,34 @@ public class LineProtocolBuffer {
                 );
                 fieldsValuesMap
                         .computeIfAbsent(MEASUREMENT_BYTES, k -> new ValuesPackage())
-                        .add(sampleResult.getBytesAsLong() + sampleResult.getSentBytes());
+                        .add(result.getBytesAsLong() + result.getSentBytes());
                 fieldsValuesMap
                         .computeIfAbsent(MEASUREMENT_RESPONSE_TIME, k -> new ValuesPackage())
-                        .add(sampleResult.getTime());
-                fieldsValuesMap
-                        .computeIfAbsent(MEASUREMENT_RATE, k -> new ValuesPackage())
-                        .add(sampleResult.isSuccessful() ? 0L : 1L);
+                        .add(
+                                result.getSampleCount() == 0
+                                        ? result.getTime()
+                                        : (result.getTime()/ result.getSampleCount())
+                        );
+                for(int sampleNum = 0; sampleNum < result.getSampleCount(); sampleNum++) {
+                    fieldsValuesMap
+                            .computeIfAbsent(MEASUREMENT_RATE, k -> new ValuesPackage())
+                            .add(sampleNum < result.getErrorCount() ? 1L : 0L);
+                }
             } else {
                 long nowTs = System.nanoTime();
                 lineProtocolMessageBuilder
                         .appendLineProtocolMeasurement(MEASUREMENT_BYTES)
                         .appendLineProtocolRawData(measurementTags)
-                        .appendLineProtocolField(RAW_MEASUREMENT_FIELD, sampleResult.getBytesAsLong() + sampleResult.getSentBytes())
+                        .appendLineProtocolField(RAW_MEASUREMENT_FIELD, result.getBytesAsLong() + result.getSentBytes())
                         .appendLineProtocolTimestampNs(nowTs)
                         .appendLineProtocolMeasurement(MEASUREMENT_RESPONSE_TIME)
                         .appendLineProtocolRawData(measurementTags)
-                        .appendLineProtocolField(RAW_MEASUREMENT_FIELD, sampleResult.getTime())
+                        .appendLineProtocolField(RAW_MEASUREMENT_FIELD, result.getTime())
                         .appendLineProtocolTimestampNs(nowTs);
             }
 
-            if (!sampleResult.isSuccessful()) {
-                String code = StringUtils.defaultIfEmpty(sampleResult.getResponseCode(), NOT_AVAILABLE);
+            if (!result.isSuccessful()) {
+                String code = StringUtils.defaultIfEmpty(result.getResponseCode(), NOT_AVAILABLE);
                 boolean isDigitCode = NumberUtils.isDigits(code);
 
                 LineProtocolBuilder auxBuilder = new LineProtocolBuilder();
@@ -206,8 +212,8 @@ public class LineProtocolBuffer {
                                         : "")
                                         + StringUtils.substring(
                                                 StringUtils.firstNonEmpty(
-                                                        sampleResult.getFirstAssertionFailureMessage(),
-                                                        sampleResult.getResponseMessage(),
+                                                        result.getFirstAssertionFailureMessage(),
+                                                        result.getResponseMessage(),
                                                         code,
                                                         NOT_AVAILABLE
                                                 ),
@@ -224,12 +230,12 @@ public class LineProtocolBuffer {
                     metricsBuffer
                             .computeIfAbsent(auxMeasurementTags, k -> new HashMap<>())
                             .computeIfAbsent(MEASUREMENT_ERRORS, k -> new ValuesPackage())
-                            .add(1L);
+                            .add(result.getErrorCount());
                 } else {
                     lineProtocolMessageBuilder
                             .appendLineProtocolMeasurement(MEASUREMENT_ERRORS)
                             .appendLineProtocolRawData(auxMeasurementTags)
-                            .appendLineProtocolField(RAW_MEASUREMENT_FIELD, 1L);
+                            .appendLineProtocolField(RAW_MEASUREMENT_FIELD, result.getErrorCount());
                 }
             }
         }

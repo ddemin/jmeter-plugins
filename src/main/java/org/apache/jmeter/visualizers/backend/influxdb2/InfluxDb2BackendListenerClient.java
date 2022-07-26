@@ -65,10 +65,13 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     private static final String ARG_TAGS = "additional_meta_tags";
     private static final String ARG_ALLOWED_SAMPLERS_REGEX = "reported_samplers_regex";
     private static final String ARG_ALLOWED_VARIABLES_REGEX = "reported_variables_regex";
+    private static final String ARG_HOSTNAME = "hostname";
     private static final String ARG_STATISTIC_MODE = "statistic_mode";
 
     private static final String TAG_ROOT = "root";
     private static final String TAG_STARTED = "isStarted";
+
+    public static final String UNDEFINED = "undefined";
 
     static {
         DEFAULT_ARGS.put(ARG_INFLUXDB_2_URL, "https://influxdb2_url:9999");
@@ -76,23 +79,25 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
         DEFAULT_ARGS.put(ARG_INFLUXDB_2_ORG, "org_name");
         DEFAULT_ARGS.put(ARG_INFLUXDB_2_BUCKET_TRX, "bucket_name_for_main_data");
         DEFAULT_ARGS.put(ARG_INFLUXDB_2_BUCKET_META, "bucket_name_for_metadata");
-        DEFAULT_ARGS.put(ARG_INTERVAL_SEC, String.valueOf(DEFAULT_SEND_INTERVAL));
 
         DEFAULT_ARGS.put(ARG_ROOT_ID, "${__UUID()}");
-        DEFAULT_ARGS.put(ARG_LAUNCH_ID, "${__UUID()}");
         DEFAULT_ARGS.put(ARG_PROFILE, "Load profile name");
         DEFAULT_ARGS.put(ARG_SCENARIO, "JMeter test/scenario name");
-        DEFAULT_ARGS.put(ARG_ENV_VERSION, "N/A");
+        DEFAULT_ARGS.put(ARG_LAUNCH_ID, "${__UUID()}");
+        DEFAULT_ARGS.put(ARG_HOSTNAME, UNDEFINED);
+        DEFAULT_ARGS.put(ARG_ENV_VERSION, UNDEFINED);
+        DEFAULT_ARGS.put(ARG_DETAILS, UNDEFINED);
         DEFAULT_ARGS.put(
                 ARG_COMPONENT_VERSION_PROP,
                 "Property name that contains versions (component1: version,component2: version"
         );
-        DEFAULT_ARGS.put(ARG_DETAILS, "N/A");
         DEFAULT_ARGS.put(ARG_TAGS, "");
 
         DEFAULT_ARGS.put(ARG_ALLOWED_SAMPLERS_REGEX, ".*");
         DEFAULT_ARGS.put(ARG_ALLOWED_VARIABLES_REGEX, "NOTHING");
+
         DEFAULT_ARGS.put(ARG_STATISTIC_MODE, "true");
+        DEFAULT_ARGS.put(ARG_INTERVAL_SEC, String.valueOf(DEFAULT_SEND_INTERVAL));
     }
 
     private final ConcurrentHashMap<String, Boolean> labelsWhiteListCache = new ConcurrentHashMap<>();
@@ -294,7 +299,13 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
             SortedMap<String, String> launchDefaultTags = new TreeMap<>();
 
             launchDefaultTags.put(TAG_ROOT, context.getParameter(ARG_ROOT_ID));
-            launchDefaultTags.put("host", InetAddress.getLocalHost().getHostName().trim().toLowerCase());
+            String hostname = context.getParameter(ARG_HOSTNAME);
+            launchDefaultTags.put(
+                    "host",
+                    StringUtils.isEmpty(hostname)
+                            ? InetAddress.getLocalHost().getHostName().trim().toLowerCase()
+                            : hostname.trim().toLowerCase()
+            );
             launchDefaultTags.put("profile", context.getParameter(ARG_PROFILE, NOT_AVAILABLE).trim().toLowerCase());
             launchDefaultTags.put(TAG_STARTED, String.valueOf(isTestStarted));
 
@@ -336,9 +347,7 @@ public class InfluxDb2BackendListenerClient extends AbstractBackendListenerClien
     }
 
     private boolean isComponentVersionsDefined() {
-        componentsVersion = JMeterContextService.getContext().getProperties().getProperty(
-                context.getParameter(ARG_COMPONENT_VERSION_PROP)
-        );
+        componentsVersion = JMeterContextService.getContext().getProperties().getProperty(versionPropName);
         return StringUtils.isNotEmpty(componentsVersion) && componentsVersion.contains(DELIMITER_COMPONENT_VERSION);
     }
 
