@@ -22,7 +22,7 @@ public class LineProtocolBuffer {
     private static final String MSG_ANONYMIZATION_PLACEMENT = "X";
     private static final int MAX_CHARS_IN_MSG = 256;
 
-    private static final String MEASUREMENT_BYTES = "network_bytes";
+    private static final String MEASUREMENT_NETWORK = "network";
     private static final String MEASUREMENT_RESPONSE_TIME = "latency_ms";
     private static final String MEASUREMENT_RATE = "rate";
     private static final String MEASUREMENT_ERRORS = "errors";
@@ -171,7 +171,7 @@ public class LineProtocolBuffer {
                         k -> new HashMap<>()
                 );
                 fieldsValuesMap
-                        .computeIfAbsent(MEASUREMENT_BYTES, k -> new ValuesPackage())
+                        .computeIfAbsent(MEASUREMENT_NETWORK, k -> new ValuesPackage())
                         .add(result.getBytesAsLong() + result.getSentBytes());
                 fieldsValuesMap
                         .computeIfAbsent(MEASUREMENT_RESPONSE_TIME, k -> new ValuesPackage())
@@ -188,7 +188,7 @@ public class LineProtocolBuffer {
             } else {
                 long nowTs = System.nanoTime();
                 lineProtocolMessageBuilder
-                        .appendLineProtocolMeasurement(MEASUREMENT_BYTES)
+                        .appendLineProtocolMeasurement(MEASUREMENT_NETWORK)
                         .appendLineProtocolRawData(measurementTags)
                         .appendLineProtocolField(RAW_MEASUREMENT_FIELD, result.getBytesAsLong() + result.getSentBytes())
                         .appendLineProtocolTimestampNs(nowTs)
@@ -264,7 +264,13 @@ public class LineProtocolBuffer {
                                 }
 
                                 lineProtocolMessageBuilder
-                                        .appendLineProtocolMeasurement(measurement)
+                                        // TODO temporary hack. I want to see network bytes-per-second metric in RATE section
+                                        // TODO I think it is a time to redesign JMeter metrics -> InfluxDB metrics mapping
+                                        .appendLineProtocolMeasurement(
+                                                measurement.equalsIgnoreCase(MEASUREMENT_NETWORK)
+                                                        ? MEASUREMENT_RATE
+                                                        : measurement
+                                        )
                                         .appendLineProtocolRawData(tags);
 
                                 float avg = stats.getAverage();
@@ -278,9 +284,13 @@ public class LineProtocolBuffer {
                                                 .appendLineProtocolField("p95", stats.getPercentile(95))
                                                 .appendLineProtocolField("p99", stats.getPercentile(99));
                                         break;
-                                    case MEASUREMENT_BYTES:
+                                    // TODO not a truly standalone measurement in InfluxDB. See TODO above.
+                                    case MEASUREMENT_NETWORK:
                                         lineProtocolMessageBuilder
-                                                .appendLineProtocolField("avg", avg);
+                                                .appendLineProtocolField(
+                                                        "network_bps",
+                                                        stats.getSum() / (float) sendIntervalSec
+                                                );
                                         break;
                                     case MEASUREMENT_RATE:
                                         lineProtocolMessageBuilder

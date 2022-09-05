@@ -11,9 +11,12 @@ repositories {
     }
 }
 
+def withoutBom = {
+    exclude group: 'org.apache.jmeter', module: 'bom'
+}
 dependencies {
-    implementation group: 'org.apache.jmeter', name: 'ApacheJMeter_components', version: "$jmeterVer"
-    implementation group: 'org.apache.jmeter', name: 'ApacheJMeter_http', version: "$jmeterVer"
+    implementation group: 'org.apache.jmeter', name: 'ApacheJMeter_components', version: "$jmeterVer", withoutBom
+    implementation group: 'org.apache.jmeter', name: 'ApacheJMeter_http', version: "$jmeterVer", withoutBom
     implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
     implementation group: 'org.apache.commons', name: 'commons-math3', version: '3.6.1'
 }
