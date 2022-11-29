@@ -1,12 +1,10 @@
-package org.apache.jmeter.visualizers.backend.influxdb2;
-
-import org.apache.commons.lang3.RandomUtils;
+package org.apache.jmeter.visualizers.backend.influxdb2.lineprotocol;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-import static org.apache.jmeter.visualizers.backend.influxdb2.Utils.enrichMsTimestamp;
+import static org.apache.jmeter.visualizers.backend.influxdb2.util.Utils.enrichMsTimestamp;
 
 public class LineProtocolBuilder {
 
@@ -29,12 +27,50 @@ public class LineProtocolBuilder {
                 .appendLineProtocolTimestampNs(enrichMsTimestamp(Instant.now().toEpochMilli()));
     }
 
+    public static LineProtocolBuilder withFirstRow(
+            String measurement,
+            Map<String, String> tags,
+            String fieldName,
+            Object fieldValue
+    ) {
+        return new LineProtocolBuilder()
+                .appendLineProtocolMeasurement(measurement)
+                .appendTags(tags)
+                .appendLineProtocolField(fieldName, fieldValue)
+                .appendLineProtocolTimestampNs(enrichMsTimestamp(Instant.now().toEpochMilli()));
+    }
+
     public String build() {
         return stringBuilder.toString();
     }
 
     public int getRows() {
         return rows;
+    }
+
+    public LineProtocolBuilder appendRowWithTextFields(
+            String measurement,
+            Map<String, String> tags,
+            List<Map.Entry<String, String>> fields
+    ) {
+        return this
+                .appendLineProtocolMeasurement(measurement)
+                .appendTags(tags)
+                .appendLineProtocolStrFields(fields)
+                .appendLineProtocolTimestampNs(enrichMsTimestamp(Instant.now().toEpochMilli()));
+    }
+
+    public LineProtocolBuilder appendRow(
+            String measurement,
+            Map<String, String> tags,
+            String fieldName,
+            Object fieldValue
+    ) {
+        return this
+                .appendLineProtocolMeasurement(measurement)
+                .appendTags(tags)
+                .appendLineProtocolField(fieldName, fieldValue)
+                .appendLineProtocolTimestampNs(enrichMsTimestamp(Instant.now().toEpochMilli()));
     }
 
     public LineProtocolBuilder appendRow(
@@ -79,6 +115,14 @@ public class LineProtocolBuilder {
                         .replace("=", "\\=")
                         .replace("\n", "\\ ")
         );
+    }
+
+    public LineProtocolBuilder appendLineProtocolStrFields(List<Map.Entry<String, String>> fields) {
+        fields.forEach(
+                fl -> appendLineProtocolField(fl.getKey(), fl.getValue())
+        );
+
+        return this;
     }
 
     public LineProtocolBuilder appendLineProtocolFields(List<Map.Entry<String, Object>> fields) {
@@ -218,6 +262,11 @@ public class LineProtocolBuilder {
                 .append(key)
                 .append('=')
                 .append(value);
+        return this;
+    }
+
+    public LineProtocolBuilder appendLine(String text) {
+        stringBuilder.append(text);
         return this;
     }
 

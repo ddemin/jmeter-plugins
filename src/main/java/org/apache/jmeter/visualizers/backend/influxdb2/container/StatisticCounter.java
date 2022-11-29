@@ -1,8 +1,8 @@
-package org.apache.jmeter.visualizers.backend.influxdb2;
+package org.apache.jmeter.visualizers.backend.influxdb2.container;
 
 import java.util.Arrays;
 
-public class ValuesPackage {
+public class StatisticCounter {
 
     public static int preallocated = 10_000;
 
@@ -11,7 +11,7 @@ public class ValuesPackage {
     private int size = 0;
     private long sum = 0;
 
-    public void add(long newItem) {
+    public synchronized void add(long newItem) {
         if (size >= data.length) {
             System.arraycopy(data, 0, new long[data.length + preallocated], 0, data.length);
         }
