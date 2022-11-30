@@ -52,10 +52,14 @@ public class OperationMetaBuffer {
                 .put("description", getObfuscatedErrorMessage(sampleResult));
     }
 
-    public void putLabelsMeta(SampleResult sampleResult, String labels) {
-        getResultBucket(sampleResult)
+    public void putLabelsMeta(String sampleName, String labels) {
+        getResultBucket(sampleName)
                 .computeIfAbsent(MetaTypeEnum.LABEL, k -> new ConcurrentHashMap<>())
                 .putAll(parseStringToMap(labels));
+    }
+
+    public void putLabelsMeta(SampleResult sampleResult, String labels) {
+        putLabelsMeta(sampleResult.getSampleLabel(), labels);
     }
 
     String getObfuscatedErrorMessage(SampleResult sampleResult) {
@@ -77,9 +81,13 @@ public class OperationMetaBuffer {
     }
 
     Map<MetaTypeEnum, Map<String, String>> getResultBucket(SampleResult sampleResult) {
+        return getResultBucket(sampleResult.getSampleLabel());
+    }
+
+    Map<MetaTypeEnum, Map<String, String>> getResultBucket(String sampleName) {
         return buffer
                 .computeIfAbsent(
-                        sampleResult.getSampleLabel(),
+                        sampleName,
                         k -> new ConcurrentHashMap<>()
                 );
     }

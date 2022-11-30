@@ -30,10 +30,10 @@ public class InfluxDbListenerArguments extends Arguments {
     private static final String ARG_EXECUTION_ID = "Unique id of execution by this JMeter instance";
 
     private static final String ARG_ENVIRONMENT = "Test environment name (e.g. dev/test/prodlike/production)";
-    private static final String ARG_HOSTNAME = "hostname";
+    private static final String ARG_HOSTNAME = "Host name";
 
     private static final String ARG_NAME = "Test name (high-level description of test scenario)";
-    private static final String ARG_PROFILE = "load_profile_name";
+    private static final String ARG_PROFILE = "Load profile name";
     private static final String ARG_DETAILS = "Test environment global version/state/constraints description";
     private static final String ARG_LABELS_ADDITIONAL
             = "User-defined test labels in format 'label1:value;label2:value' without quotes";
@@ -121,8 +121,8 @@ public class InfluxDbListenerArguments extends Arguments {
         this.samplersRegex = Pattern.compile(context.getParameter(ARG_ALLOWED_SAMPLERS_REGEX));
         this.variablesRegex = Pattern.compile(context.getParameter(ARG_ALLOWED_VARIABLES_REGEX));
 
-        this.batchingPeriod = context.getIntParameter(ARG_BATCHING_SEC);
-        this.warmupInterval = context.getIntParameter(ARG_WARMUP_SEC);
+        this.batchingPeriod = Integer.parseInt(context.getParameter(ARG_BATCHING_SEC).trim());
+        this.warmupInterval = Integer.parseInt(context.getParameter(ARG_WARMUP_SEC).trim());
     }
 
     URL getInfluxDbUrl() {

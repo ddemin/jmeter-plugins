@@ -26,12 +26,17 @@ public class Utils {
 
     @NotNull
     public static Map<String, String> parseStringToMap(String text) {
+        return parseStringToMap(text, DELIMITER_LIST_ITEM, DELIMITER_KEY_VALUE);
+    }
+
+    @NotNull
+    public static Map<String, String> parseStringToMap(String text, String itemsDelimiter, String keyValueDelimiter) {
         return Arrays
-                .stream(text.trim().split(DELIMITER_LIST_ITEM))
+                .stream(text.trim().split(itemsDelimiter))
                 .filter(StringUtils::isNoneEmpty)
                 .map(
                         cv -> {
-                            String[] arr = cv.trim().split(DELIMITER_KEY_VALUE);
+                            String[] arr = cv.trim().split(keyValueDelimiter);
                             if (arr.length > 2) {
                                 LOG.error("More than one delimiter for key-value expression: " + cv);
                                 return null;
@@ -43,7 +48,7 @@ public class Utils {
                             } else if (arr.length == 1) {
                                 return new AbstractMap.SimpleEntry<>(
                                         arr[0].trim(),
-                                        ""
+                                        UNDEFINED
                                 );
                             } else {
                                 return null;
@@ -53,5 +58,4 @@ public class Utils {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
-
 }

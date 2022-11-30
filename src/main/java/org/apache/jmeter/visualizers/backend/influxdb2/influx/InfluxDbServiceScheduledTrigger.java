@@ -25,7 +25,11 @@ public class InfluxDbServiceScheduledTrigger implements Runnable {
 
     @Override
     public void run() {
+        influxService.collectAndSendVersions();
+
+        influxService.collectOperationsLabels();
         influxService.sendOperationsMetrics();
+
         influxService.processRetryQueue();
     }
 
@@ -37,7 +41,6 @@ public class InfluxDbServiceScheduledTrigger implements Runnable {
                 TimeUnit.SECONDS
         );
     }
-
 
     public void destroy() {
         try {

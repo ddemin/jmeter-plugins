@@ -1,5 +1,7 @@
 package org.apache.jmeter.visualizers.backend.influxdb2.influx;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.jmeter.threads.JMeterContextService;
 import org.apache.jmeter.visualizers.backend.influxdb2.container.OperationMetaBuffer;
 import org.apache.jmeter.visualizers.backend.influxdb2.lineprotocol.LineProtocolBuilder;
 import org.apache.jmeter.visualizers.backend.influxdb2.lineprotocol.LineProtocolConverter;
@@ -8,12 +10,22 @@ import org.apache.jmeter.visualizers.backend.influxdb2.util.RetriableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+
+import static org.apache.jmeter.visualizers.backend.influxdb2.util.Utils.*;
 
 public class InfluxDbService {
     private static final Logger LOG = LoggerFactory.getLogger(InfluxDbService.class);
     private static final int PAUSE_BEFORE_LAST_BATCH_MS = 10_000;
+    private static final String VERSIONS_PROPERTY_NAME = "jmeter.components.versions";
+    private static final String OPERATIONS_LABELS_PROPERTY = "jmeter.operations.labels";
+    private static final String DELIMITER_SAMPLERS_LABELS_KV = "=";
+    private static final String DELIMITER_SAMPLERS_LABELS_ITEMS = ";";
 
+    private final Set<String> labelsThatReported = Collections.synchronizedSet(new HashSet<>());
     private final OperationStatisticBuffer statisticBuffer;
     private final OperationMetaBuffer metaBuffer;
     private final InfluxDbHttpClient influxClient;
@@ -22,6 +34,10 @@ public class InfluxDbService {
     private final String bucketTestMeta;
     private final String bucketOperationStats;
     private final String bucketOperationMeta;
+
+    private int samplersLabelsHash;
+    private String componentsVersion;
+    private boolean areVersionsSent;
 
     public InfluxDbService(
             InfluxDbHttpClient httpClient,
@@ -69,6 +85,11 @@ public class InfluxDbService {
         }
 
         this.statisticBuffer.clear();
+        this.metaBuffer.clear();
+        this.labelsThatReported.clear();
+        this.componentsVersion = null;
+        this.areVersionsSent = false;
+        this.samplersLabelsHash = 0;
 
         LOG.info("InfluxDB service and job have been stopped, buffer has been cleaned");
     }
@@ -84,6 +105,27 @@ public class InfluxDbService {
         influxClient.processRetryQueue();
     }
 
+    // TODO Write the unit-test
+    void collectOperationsLabels() {
+        String samplersLabels = JMeterContextService.getContext().getProperties().getProperty(
+               OPERATIONS_LABELS_PROPERTY,
+                ""
+        );
+
+        if (samplersLabelsHash != samplersLabels.hashCode()) {
+            samplersLabelsHash = samplersLabels.hashCode();
+
+            Map<String, String> labelsMap = parseStringToMap(
+                    samplersLabels, DELIMITER_SAMPLERS_LABELS_ITEMS, DELIMITER_SAMPLERS_LABELS_KV
+            );
+            labelsMap.forEach((key, value) -> {
+                if (!labelsThatReported.contains(key)) {
+                    labelsThatReported.add(key);
+                    metaBuffer.putLabelsMeta(key, value);
+                }
+            });
+        }
+    }
     void sendOperationsMetrics() {
         try {
             LOG.debug("Send operations metrics");
@@ -135,6 +177,22 @@ public class InfluxDbService {
             influxClient.send(bucket, content);
         } catch (RetriableException e) {
             // Do nothing
+        }
+    }
+
+    boolean isComponentsVersionsDefined() {
+        componentsVersion = JMeterContextService.getContext().getProperties().getProperty(VERSIONS_PROPERTY_NAME);
+        return StringUtils.isNotEmpty(componentsVersion) && componentsVersion.contains(DELIMITER_KEY_VALUE);
+    }
+
+    void collectAndSendVersions() {
+        if (!areVersionsSent && isComponentsVersionsDefined()) {
+            LOG.info(
+                    "Property '" + VERSIONS_PROPERTY_NAME + "' with components versions was detected. Send versions: "
+                            + componentsVersion
+            );
+            sendVersions(componentsVersion);
+            areVersionsSent = true;
         }
     }
 

@@ -21,11 +21,6 @@ class UtilsTest {
     @Test
     public void parseStringToMap() {
         String mapAsString = "test1:vALUe1  , TEST2 :  value2,,test3";
-        Map<String, String> expectedMap = Map.of(
-                "test1", "vALUe1",
-                "TEST2", "value2",
-                "test3", ""
-        );
         Map<String, String> actualMap = Utils.parseStringToMap(mapAsString);
 
         assertThat(
