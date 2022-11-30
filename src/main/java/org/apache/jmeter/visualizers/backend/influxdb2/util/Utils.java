@@ -20,7 +20,7 @@ public class Utils {
     public static final String DELIMITER_KEY_VALUE = ":";
     public static final String DELIMITER_LIST_ITEM = ",";
 
-    public static long enrichMsTimestamp(long ms) {
+    public static long toNsPrecision(long ms) {
         return ms * 1_000_000 + RandomUtils.nextInt(0, 999_999);
     }
 

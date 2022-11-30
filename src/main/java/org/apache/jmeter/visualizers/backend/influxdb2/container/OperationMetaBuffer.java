@@ -39,18 +39,22 @@ public class OperationMetaBuffer {
     }
 
     public void putErrorMeta(SampleResult sampleResult) {
-        if (sampleResult.getFirstAssertionFailureMessage() == null) {
-            LOG.error("Sample is marked as failed, but assertion message is null: " + sampleResult.getSampleLabel());
+        if (sampleResult.isSuccessful()) {
+            LOG.error(
+                    "Sample is reported as failed, but isSuccessful flag is TRUE. Sample will be ignored: "
+                    + sampleResult.getSampleLabel()
+            );
+            return;
         }
 
         getResultBucket(sampleResult)
-                .putIfAbsent(MetaTypeEnum.ERROR, new ConcurrentHashMap<>())
+                .computeIfAbsent(MetaTypeEnum.ERROR,  k -> new ConcurrentHashMap<>())
                 .put("description", getObfuscatedErrorMessage(sampleResult));
     }
 
     public void putLabelsMeta(SampleResult sampleResult, String labels) {
         getResultBucket(sampleResult)
-                .putIfAbsent(MetaTypeEnum.LABEL, new ConcurrentHashMap<>())
+                .computeIfAbsent(MetaTypeEnum.LABEL, k -> new ConcurrentHashMap<>())
                 .putAll(parseStringToMap(labels));
     }
 
@@ -69,14 +73,14 @@ public class OperationMetaBuffer {
                                 0,
                                 ERROR_MAX_CHARS
                         )
-                        .replaceAll(ERROR_OBFUSCATION_REGEXP, ERROR_OBFUSCATION_PLACEHOLDER);
+                .replaceAll(ERROR_OBFUSCATION_REGEXP, ERROR_OBFUSCATION_PLACEHOLDER);
     }
 
     Map<MetaTypeEnum, Map<String, String>> getResultBucket(SampleResult sampleResult) {
         return buffer
-                .putIfAbsent(
+                .computeIfAbsent(
                         sampleResult.getSampleLabel(),
-                        new ConcurrentHashMap<>()
+                        k -> new ConcurrentHashMap<>()
                 );
     }
 

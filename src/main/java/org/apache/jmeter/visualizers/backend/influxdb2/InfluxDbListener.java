@@ -137,6 +137,7 @@ public class InfluxDbListener implements BackendListenerClient {
         this.samplersWhitelistCache.clear();
 
         this.influxService.init();
+        this.influxScheduledTrigger.init();
     }
 
     Map<String, Object> filterJmeterVariables(InfluxDbListenerArguments arguments) {

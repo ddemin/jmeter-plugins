@@ -58,7 +58,7 @@ public class LineProtocolConverter {
     ) {
         LineProtocolBuilder protocolBuilder = LineProtocolBuilder.withFirstRow(
                 "execution",
-                buildTestEventTags(true),
+                buildTestEventTags(isItStarted),
                 List.of(new AbstractMap.SimpleEntry<>("uuid", executionUuid))
         );
 
@@ -66,11 +66,15 @@ public class LineProtocolConverter {
             final Map<String, String> tags = buildTestMetaTags();
 
             final ArrayList<Map.Entry<String, String>> labelFields = new ArrayList<>();
-            labelFields.add(new AbstractMap.SimpleEntry<>("profile", profile));
             labelFields.add(new AbstractMap.SimpleEntry<>("details", details));
             labelFields.add(new AbstractMap.SimpleEntry<>("name", testname));
+            labelFields.add(new AbstractMap.SimpleEntry<>("profile", profile));
 
-            userLabels.entrySet().forEach(labelFields::add);
+            userLabels.entrySet().forEach(
+                    e -> labelFields.add(
+                            StringUtils.isEmpty(e.getValue()) ? new AbstractMap.SimpleEntry<>(e.getKey(), UNDEFINED) : e
+                    )
+            );
 
             protocolBuilder.appendRowWithTextFields(
                     "label",
@@ -83,7 +87,21 @@ public class LineProtocolConverter {
             variableFields.add(new AbstractMap.SimpleEntry<>("period_sec", batchingPeriod));
 
             if (additionalVariables != null) {
-                additionalVariables.entrySet().forEach(variableFields::add);
+                additionalVariables.entrySet()
+                        .stream()
+                        .map(
+                                e ->
+                                        e.getValue() == null
+                                                ? new AbstractMap.SimpleEntry<>(e.getKey(), (Object) UNDEFINED)
+                                                : e
+                        )
+                        .map(
+                                e ->
+                                        (e.getValue() instanceof String && StringUtils.isEmpty((String) e.getValue()))
+                                                ? new AbstractMap.SimpleEntry<>(e.getKey(), (Object) UNDEFINED)
+                                                : e
+                        )
+                        .forEach(variableFields::add);
             }
 
             protocolBuilder.appendRow(
@@ -117,13 +135,11 @@ public class LineProtocolConverter {
                 .sorted(Map.Entry.comparingByKey())
                 .toList();
 
-        LineProtocolBuilder builder = LineProtocolBuilder.withFirstRow(
+        return LineProtocolBuilder.withFirstRow(
                 "version",
                 buildTestMetaTags(),
                 versionsByComponent
         );
-
-        return builder;
     }
 
     public LineProtocolBuilder createBuilderForOperationsStatistic(
@@ -152,17 +168,17 @@ public class LineProtocolConverter {
                                                 .appendLineProtocolField(STAT_TYPE_PERC_95, stats.getPercentile(95))
                                                 .appendLineProtocolField(STAT_TYPE_PERC_99, stats.getPercentile(99));
                                         case LOAD, ERROR -> lpBuilder
-                                                .appendLineProtocolField(STAT_TYPE_COUNT, stats.getSize())
+                                                .appendLineProtocolField(STAT_TYPE_COUNT, stats.getSum())
                                                 .appendLineProtocolField(
                                                         STAT_TYPE_RATE,
-                                                        stats.getSize() / (float) batchingPeriod
+                                                        stats.getSum() / (float) batchingPeriod
                                                 );
                                     }
                                     // Additional statistic
                                     switch (metric) {
                                         case ERROR -> lpBuilder.appendLineProtocolField(
                                                 STAT_TYPE_SHARE,
-                                                stats.getSum() / (float) stats.getSize()
+                                                stats.getSum() / (float) stats.getSamples()
                                         );
                                         case NETWORK -> lpBuilder.appendLineProtocolField(
                                                 STAT_TYPE_RATE,
@@ -170,6 +186,7 @@ public class LineProtocolConverter {
                                         );
                                     }
                                 }
+                                lpBuilder.appendLineProtocolTimestampNs(toNsPrecision(System.currentTimeMillis()));
                             }
                     );
                 });
@@ -195,6 +212,7 @@ public class LineProtocolConverter {
                                         StringUtils.isEmpty(labelValue) ? UNDEFINED : labelValue
                                 )
                 );
+                lpBuilder.appendLineProtocolTimestampNs(toNsPrecision(System.currentTimeMillis()));
             });
         });
 
@@ -202,11 +220,13 @@ public class LineProtocolConverter {
     }
 
     Map<String, String> buildTestEventTags(boolean isItStart) {
-        return Map.of(
-                "test", testUuid,
-                "is_it_start", String.valueOf(isItStart),
-                "hostname", hostname,
-                "environment", environment
+        return new TreeMap<>(
+                Map.of(
+                        "environment", environment,
+                        "hostname", hostname,
+                        "is_it_start", String.valueOf(isItStart),
+                        "test", testUuid
+                )
         );
     }
 
@@ -235,10 +255,12 @@ public class LineProtocolConverter {
             );
         }
 
-        return Map.of(
-                "execution", executionUuid,
-                "target", targetService,
-                "operation", operation
+        return new TreeMap<>(
+                Map.of(
+                        "execution", executionUuid,
+                        "target", targetService,
+                        "operation", operation
+                )
         );
     }
 

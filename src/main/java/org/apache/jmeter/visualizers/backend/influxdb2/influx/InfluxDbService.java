@@ -88,27 +88,29 @@ public class InfluxDbService {
         try {
             LOG.debug("Send operations metrics");
 
-            LineProtocolBuilder lineProtocolBuilder;
-
+            LineProtocolBuilder lineProtocolBuilderStats;
             // Pause any new metrics collection during batch preparation
             // Map instance == Map mutex instance (see SynchronizedMap code)
             synchronized (statisticBuffer.getBuffer()) {
-                lineProtocolBuilder = converter.createBuilderForOperationsStatistic(statisticBuffer.getBuffer());
+                lineProtocolBuilderStats = converter.createBuilderForOperationsStatistic(statisticBuffer.getBuffer());
                 statisticBuffer.clear();
             }
 
+            LineProtocolBuilder lineProtocolBuilderMeta;
             // Pause any new metrics collection during batch preparation
             // Map instance == Map mutex instance (see SynchronizedMap code)
             synchronized (metaBuffer.getBuffer()) {
-                lineProtocolBuilder
-                        .appendLine(converter.createBuilderForOperationsMetadata(metaBuffer.getBuffer()).build());
+                lineProtocolBuilderMeta = converter.createBuilderForOperationsMetadata(metaBuffer.getBuffer());
                 metaBuffer.clear();
             }
 
-            if (lineProtocolBuilder.getRows() > 0) {
-                send(bucketOperationStats, lineProtocolBuilder.build());
+            if (lineProtocolBuilderStats.getRows() > 0) {
+                send(bucketOperationStats, lineProtocolBuilderStats.build());
             }
 
+            if (lineProtocolBuilderMeta.getRows() > 0) {
+                send(bucketOperationMeta, lineProtocolBuilderMeta.build());
+            }
         } catch (Throwable tr) {
             LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage(), tr);
         }

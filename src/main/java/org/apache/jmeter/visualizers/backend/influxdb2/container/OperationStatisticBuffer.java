@@ -36,36 +36,34 @@ public class OperationStatisticBuffer {
 
     void putLatencyMetrics(SampleResult sampleResult) {
         getResultBucket(sampleResult)
-                .putIfAbsent(LATENCY, new StatisticCounter())
-                .add(sampleResult.getLatency());
+                .computeIfAbsent(LATENCY,  k -> new StatisticCounter())
+                .add(sampleResult.getTime());
     }
 
     void putLoadMetrics(SampleResult sampleResult) {
         getResultBucket(sampleResult)
-                .putIfAbsent(LOAD, new StatisticCounter())
-                .add(1);
+                .computeIfAbsent(LOAD,  k -> new StatisticCounter())
+                .add(sampleResult.getSampleCount());
 
     }
 
     void putErrorMetrics(SampleResult sampleResult) {
-        for (int sampleNum = 0; sampleNum < sampleResult.getSampleCount(); sampleNum++) {
-            getResultBucket(sampleResult)
-                    .putIfAbsent(ERROR, new StatisticCounter())
-                    .add(sampleNum < sampleResult.getErrorCount() ? 1L : 0L);
-        }
+        getResultBucket(sampleResult)
+                .computeIfAbsent(ERROR,  k -> new StatisticCounter())
+                .add(sampleResult.getErrorCount(), sampleResult.getSampleCount());
     }
 
     void putNetworkMetrics(SampleResult sampleResult) {
         getResultBucket(sampleResult)
-                .putIfAbsent(NETWORK, new StatisticCounter())
+                .computeIfAbsent(NETWORK,  k -> new StatisticCounter())
                 .add(sampleResult.getBytesAsLong() + sampleResult.getSentBytes());
     }
 
     Map<StatisticTypeEnum, StatisticCounter> getResultBucket(SampleResult sampleResult) {
         return buffer
-                .putIfAbsent(
+                .computeIfAbsent(
                         sampleResult.getSampleLabel(),
-                        new ConcurrentHashMap<>()
+                        k -> new ConcurrentHashMap<>()
                 );
     }
 

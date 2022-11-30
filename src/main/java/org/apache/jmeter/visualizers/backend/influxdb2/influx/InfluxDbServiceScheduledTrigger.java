@@ -10,19 +10,17 @@ import java.util.concurrent.TimeUnit;
 
 public class InfluxDbServiceScheduledTrigger implements Runnable {
     private static final Logger LOG = LoggerFactory.getLogger(InfluxDbServiceScheduledTrigger.class);
+
     private final InfluxDbService influxService;
-    private ScheduledExecutorService scheduler;
+    private final ScheduledExecutorService scheduler;
+    private final long batchingPeriod;
+
     private ScheduledFuture<?> timerHandle;
 
     public InfluxDbServiceScheduledTrigger(InfluxDbService influxService, int batchingPeriod) {
         this.influxService = influxService;
         this.scheduler = Executors.newScheduledThreadPool(1);
-        this.timerHandle = scheduler.scheduleAtFixedRate(
-                this,
-                0,
-                batchingPeriod,
-                TimeUnit.SECONDS
-        );
+        this.batchingPeriod = batchingPeriod;
     }
 
     @Override
@@ -30,6 +28,16 @@ public class InfluxDbServiceScheduledTrigger implements Runnable {
         influxService.sendOperationsMetrics();
         influxService.processRetryQueue();
     }
+
+    public void init() {
+        this.timerHandle = scheduler.scheduleAtFixedRate(
+                this,
+                batchingPeriod,
+                batchingPeriod,
+                TimeUnit.SECONDS
+        );
+    }
+
 
     public void destroy() {
         try {
@@ -49,4 +57,5 @@ public class InfluxDbServiceScheduledTrigger implements Runnable {
             LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage(), tr);
         }
     }
+
 }
