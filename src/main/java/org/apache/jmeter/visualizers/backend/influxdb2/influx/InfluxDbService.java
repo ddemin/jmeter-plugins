@@ -107,12 +107,17 @@ public class InfluxDbService {
 
     // TODO Write the unit-test
     void collectOperationsLabels() {
-        String samplersLabels = JMeterContextService.getContext().getProperties().getProperty(
-               OPERATIONS_LABELS_PROPERTY,
-                ""
-        );
+        String samplersLabels = null;
+        try {
+            samplersLabels = JMeterContextService.getContext().getProperties().getProperty(
+                    OPERATIONS_LABELS_PROPERTY,
+                    ""
+            );
+        } catch (NullPointerException ex) {
+            LOG.error(ex.getMessage(), ex);
+        }
 
-        if (samplersLabelsHash != samplersLabels.hashCode()) {
+        if (samplersLabels != null && samplersLabelsHash != samplersLabels.hashCode()) {
             samplersLabelsHash = samplersLabels.hashCode();
 
             Map<String, String> labelsMap = parseStringToMap(
@@ -126,6 +131,7 @@ public class InfluxDbService {
             });
         }
     }
+
     void sendOperationsMetrics() {
         try {
             LOG.debug("Send operations metrics");
@@ -181,7 +187,12 @@ public class InfluxDbService {
     }
 
     boolean isComponentsVersionsDefined() {
-        componentsVersion = JMeterContextService.getContext().getProperties().getProperty(VERSIONS_PROPERTY_NAME);
+        try {
+            componentsVersion = JMeterContextService.getContext().getProperties().getProperty(VERSIONS_PROPERTY_NAME, "");
+        } catch (NullPointerException ex) {
+            LOG.error(ex.getMessage(), ex);
+            return false;
+        }
         return StringUtils.isNotEmpty(componentsVersion) && componentsVersion.contains(DELIMITER_KEY_VALUE);
     }
 

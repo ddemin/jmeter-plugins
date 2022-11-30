@@ -195,24 +195,24 @@ public class LineProtocolConverter {
     }
 
     public LineProtocolBuilder createBuilderForOperationsMetadata(
-            Map<String, Map<MetaTypeEnum, Map<String, String>>> metaByMetricName
+            Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> metaByMetricName
     ) {
         LineProtocolBuilder lpBuilder = new LineProtocolBuilder();
 
         metaByMetricName.forEach((samplerName, metricMeta) -> {
             Map<String, String> tags = parseSamplerNameToTags(samplerName);
             metricMeta.forEach((metric, meta) -> {
-                lpBuilder
-                        .appendLineProtocolMeasurement(metric.getTagName())
-                        .appendTags(tags);
                 meta.forEach(
-                        (labelKey, labelValue) ->
-                                lpBuilder.appendLineProtocolField(
-                                        labelKey,
-                                        StringUtils.isEmpty(labelValue) ? UNDEFINED : labelValue
-                                )
+                        (entry) ->
+                                lpBuilder
+                                        .appendLineProtocolMeasurement(metric.getTagName())
+                                        .appendTags(tags)
+                                        .appendLineProtocolField(
+                                                entry.getKey(),
+                                                StringUtils.isEmpty(entry.getValue()) ? UNDEFINED : entry.getValue()
+                                        )
+                                        .appendLineProtocolTimestampNs(toNsPrecision(System.currentTimeMillis()))
                 );
-                lpBuilder.appendLineProtocolTimestampNs(toNsPrecision(System.currentTimeMillis()));
             });
         });
 

@@ -6,8 +6,7 @@ import org.apache.jmeter.visualizers.backend.influxdb2.container.StatisticTypeEn
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 import static org.apache.jmeter.visualizers.backend.influxdb2.lineprotocol.LineProtocolBuilder.CHAR_UNIX_NEW_LINE;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -96,13 +95,15 @@ class LineProtocolConverterTest {
 
     @Test
     void lpStringForOperationsMetadata() {
-        Map<String, Map<MetaTypeEnum, Map<String, String>>> metaMap = new TreeMap<>();
+        Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> metaMap = new TreeMap<>();
         metaMap.put(
                 " Service1 : GET/api/v1/test ",
                 new TreeMap<>(
                         Map.of(
-                                MetaTypeEnum.ERROR, Map.of("description", "Http code 5xx: some error details"),
-                                MetaTypeEnum.LABEL, new TreeMap<>(Map.of("label1", "value 1 2 3", "label2", "5"))
+                                MetaTypeEnum.ERROR,
+                                Arrays.asList(new AbstractMap.SimpleEntry<>("description", "Http code 5xx: some error details")),
+                                MetaTypeEnum.LABEL,
+                                Arrays.asList(new AbstractMap.SimpleEntry<>("label1", "value 1 2 3"), new AbstractMap.SimpleEntry<>("label2", "5"))
                         )
                 )
         );
@@ -110,15 +111,17 @@ class LineProtocolConverterTest {
                 " Service2 : GET/api/v1/test ",
                 new TreeMap<>(
                         Map.of(
-                                MetaTypeEnum.ERROR, Map.of("description", "Http code 5xx: some error details 2"),
-                                MetaTypeEnum.LABEL, new TreeMap<>(Map.of("label11", "value 1 2 3", "label22", "6"))
+                                MetaTypeEnum.ERROR,
+                                Arrays.asList(new AbstractMap.SimpleEntry<>("description", "Http code 5xx: some error details 2")),
+                                MetaTypeEnum.LABEL,
+                                Arrays.asList(new AbstractMap.SimpleEntry<>("label11", "value 1 2 3"), new AbstractMap.SimpleEntry<>("label22", "6"))
                         )
                 )
         );
         String[] strArray = converter.createBuilderForOperationsMetadata(metaMap)
                 .build()
                 .split(String.valueOf(CHAR_UNIX_NEW_LINE));
-        assertThat(strArray.length, is(4));
+        assertThat(strArray.length, is(6));
 
         assertThat(
                 strArray[0],
@@ -128,17 +131,27 @@ class LineProtocolConverterTest {
         assertThat(
                 strArray[1],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service1"
-                        + " label1=\"value 1 2 3\",label2=\"5\" ")
+                        + " label1=\"value 1 2 3\" ")
         );
         assertThat(
                 strArray[2],
+                startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service1"
+                        + " label2=\"5\" ")
+        );
+        assertThat(
+                strArray[3],
                 startsWith("error,execution=2-2-2-2,operation=get/api/v1/test,target=service2"
                         + " description=\"Http code 5xx: some error details 2\" ")
         );
         assertThat(
-                strArray[3],
+                strArray[4],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service2"
-                        + " label11=\"value 1 2 3\",label22=\"6\" ")
+                        + " label11=\"value 1 2 3\" ")
+        );
+        assertThat(
+                strArray[5],
+                startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service2"
+                        + " label22=\"6\" ")
         );
     }
 

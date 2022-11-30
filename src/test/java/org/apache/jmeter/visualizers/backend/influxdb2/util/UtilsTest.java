@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.apache.jmeter.visualizers.backend.influxdb2.util.Utils.UNDEFINED;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
@@ -29,7 +30,7 @@ class UtilsTest {
                         aMapWithSize(3),
                         hasEntry("test1", "vALUe1"),
                         hasEntry("TEST2", "value2"),
-                        hasEntry("test3", "")
+                        hasEntry("test3", UNDEFINED)
                 )
         );
     }

@@ -6,9 +6,7 @@ import org.apache.jmeter.samplers.SampleResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.jmeter.visualizers.backend.influxdb2.util.Utils.UNDEFINED;
@@ -26,10 +24,10 @@ public class OperationMetaBuffer {
     private static final String ERROR_OBFUSCATION_PLACEHOLDER = "x";
     private static final int ERROR_MAX_CHARS = 256;
 
-    private final Map<String, Map<MetaTypeEnum, Map<String, String>>> buffer
+    private final Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> buffer
             = Collections.synchronizedMap(new HashMap<>());
 
-    public Map<String, Map<MetaTypeEnum, Map<String, String>>> getBuffer() {
+    public Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> getBuffer() {
         return buffer;
     }
 
@@ -48,14 +46,16 @@ public class OperationMetaBuffer {
         }
 
         getResultBucket(sampleResult)
-                .computeIfAbsent(MetaTypeEnum.ERROR,  k -> new ConcurrentHashMap<>())
-                .put("description", getObfuscatedErrorMessage(sampleResult));
+                .computeIfAbsent(MetaTypeEnum.ERROR,  k -> Collections.synchronizedList(new ArrayList<>()))
+                .add(new AbstractMap.SimpleEntry<>("description", getObfuscatedErrorMessage(sampleResult)));
     }
 
     public void putLabelsMeta(String sampleName, String labels) {
         getResultBucket(sampleName)
-                .computeIfAbsent(MetaTypeEnum.LABEL, k -> new ConcurrentHashMap<>())
-                .putAll(parseStringToMap(labels));
+                .computeIfAbsent(MetaTypeEnum.LABEL, k -> Collections.synchronizedList(new ArrayList<>()))
+                .addAll(
+                        parseStringToMap(labels).entrySet().stream().toList()
+                );
     }
 
     public void putLabelsMeta(SampleResult sampleResult, String labels) {
@@ -80,11 +80,11 @@ public class OperationMetaBuffer {
                 .replaceAll(ERROR_OBFUSCATION_REGEXP, ERROR_OBFUSCATION_PLACEHOLDER);
     }
 
-    Map<MetaTypeEnum, Map<String, String>> getResultBucket(SampleResult sampleResult) {
+    Map<MetaTypeEnum, List<Map.Entry<String, String>>> getResultBucket(SampleResult sampleResult) {
         return getResultBucket(sampleResult.getSampleLabel());
     }
 
-    Map<MetaTypeEnum, Map<String, String>> getResultBucket(String sampleName) {
+    Map<MetaTypeEnum, List<Map.Entry<String, String>>> getResultBucket(String sampleName) {
         return buffer
                 .computeIfAbsent(
                         sampleName,

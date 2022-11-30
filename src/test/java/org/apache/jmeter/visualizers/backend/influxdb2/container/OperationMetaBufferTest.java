@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.AbstractMap;
+
 import static org.apache.jmeter.visualizers.backend.influxdb2.util.Utils.UNDEFINED;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -87,27 +89,27 @@ class OperationMetaBufferTest {
         );
         assertThat(
                 buffer.getBuffer().get(labelWithDigitCode).get(MetaTypeEnum.ERROR),
-                aMapWithSize(1)
+                hasSize(1)
         );
 
         assertThat(
-                buffer.getBuffer().get(labelWithDigitCode).get(MetaTypeEnum.ERROR).get("description"),
-                is("Error code 504: " + UNDEFINED)
+                buffer.getBuffer().get(labelWithDigitCode).get(MetaTypeEnum.ERROR).get(0),
+                equalTo(new AbstractMap.SimpleEntry<>("description", "Error code 504: " + UNDEFINED))
         );
 
         assertThat(
-                buffer.getBuffer().get(labelWithDigitCodeAndMessage).get(MetaTypeEnum.ERROR).get("description"),
-                is("Error code 504: some details")
+                buffer.getBuffer().get(labelWithDigitCodeAndMessage).get(MetaTypeEnum.ERROR).get(0),
+                equalTo(new AbstractMap.SimpleEntry<>("description", "Error code 504: some details"))
         );
 
         assertThat(
-                buffer.getBuffer().get(labelWithTextCode).get(MetaTypeEnum.ERROR).get("description"),
-                is("text code")
+                buffer.getBuffer().get(labelWithTextCode).get(MetaTypeEnum.ERROR).get(0),
+                equalTo(new AbstractMap.SimpleEntry<>("description", "text code"))
         );
 
         assertThat(
-                buffer.getBuffer().get(labelWithTextCodeAndMessage).get(MetaTypeEnum.ERROR).get("description"),
-                is("some details x x")
+                buffer.getBuffer().get(labelWithTextCodeAndMessage).get(MetaTypeEnum.ERROR).get(0),
+                equalTo(new AbstractMap.SimpleEntry<>("description", "some details x x"))
         );
 
         assertThat(
@@ -136,16 +138,16 @@ class OperationMetaBufferTest {
         );
         assertThat(
                 buffer.getBuffer().get(label).get(MetaTypeEnum.LABEL),
-                aMapWithSize(2)
+                hasSize(2)
         );
 
         assertThat(
-                buffer.getBuffer().get(label).get(MetaTypeEnum.LABEL).get("some label"),
-                is("some value")
+                buffer.getBuffer().get(label).get(MetaTypeEnum.LABEL).get(0),
+                equalTo(new AbstractMap.SimpleEntry<>("some label", "some value"))
         );
         assertThat(
-                buffer.getBuffer().get(label).get(MetaTypeEnum.LABEL).get("just label"),
-                is("")
+                buffer.getBuffer().get(label).get(MetaTypeEnum.LABEL).get(1),
+                equalTo(new AbstractMap.SimpleEntry<>("just label", UNDEFINED))
         );
     }
 

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.awaitility.Awaitility.await;
 
-@WireMockTest(httpPort = 8088)
+@WireMockTest(httpPort = 8078)
 class InfluxDbServiceTest {
 
     InfluxDbServiceScheduledTrigger trigger;
@@ -32,7 +32,7 @@ class InfluxDbServiceTest {
     @BeforeEach
     void setup() throws MalformedURLException, URISyntaxException {
         InfluxDbHttpClient influxDbHttpClient = new InfluxDbHttpClient(
-                new URL("http://localhost:8088"),
+                new URL("http://localhost:8078"),
                 "testOrg",
                 "testToken"
         );
@@ -121,8 +121,7 @@ class InfluxDbServiceTest {
         resetAllRequests();
 
         fillBuffersWithTestData();
-
-        verifyOperationWriteRequests(7);
+        verifyOperationWriteRequests(1111);
     }
 
     @Test
@@ -173,9 +172,11 @@ class InfluxDbServiceTest {
                             verify(
                                     1,
                                     getPatternForWriteRequestToBucket("operationMeta")
-                                            .withRequestBody(matching(".+\\n.+\\n"))
-                                            .withRequestBody(matching(".*(?:|\n)label,execution=2-2-2-2,operation=operation1,target=service1 somelabel=\"somevalue\",justlabel=\"undefined\" [0-9]+\\n.*"))
+                                            .withRequestBody(matching(".+\\n.+\\n.+\\n.+\\n"))
+                                            .withRequestBody(matching(".*(?:|\n)label,execution=2-2-2-2,operation=operation1,target=service1 somelabel=\"somevalue\" [0-9]+\\n.*"))
+                                            .withRequestBody(matching(".*(?:|\n)label,execution=2-2-2-2,operation=operation1,target=service1 justlabel=\"undefined\" [0-9]+\\n.*"))
                                             .withRequestBody(matching(".*(?:|\n)error,execution=2-2-2-2,operation=operation1,target=service1 description=\"Error code 504: undefined\" [0-9]+\\n.*"))
+                                            .withRequestBody(matching(".*(?:|\n)error,execution=2-2-2-2,operation=operation1,target=service1 description=\"Error code 501: undefined\" [0-9]+\\n.*"))
                             );
                         }
                 );
@@ -188,6 +189,13 @@ class InfluxDbServiceTest {
         withDigitCode.setSuccessful(false);
         withDigitCode.setResponseCode("504");
         metaBuffer.putErrorMeta(withDigitCode);
+
+        SampleResult withDigitCode2 = new SampleResult(System.currentTimeMillis(), 1234L);
+        String labelWithDigitCode2 = "service1: operation1";
+        withDigitCode2.setSampleLabel(labelWithDigitCode2);
+        withDigitCode2.setSuccessful(false);
+        withDigitCode2.setResponseCode("501");
+        metaBuffer.putErrorMeta(withDigitCode2);
 
         SampleResult sample = new SampleResult(System.currentTimeMillis(), 1234L);
         String label = "service1: operation1";
