@@ -4,6 +4,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.visualizers.backend.influxdb2.container.MetaTypeEnum;
 import org.apache.jmeter.visualizers.backend.influxdb2.container.StatisticTypeEnum;
 import org.apache.jmeter.visualizers.backend.influxdb2.container.StatisticCounter;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -218,6 +219,26 @@ public class LineProtocolConverter {
 
         return lpBuilder;
     }
+
+    public LineProtocolBuilder enrichWithOperationsErrorsMetadata(
+            @NotNull LineProtocolBuilder lpBuilder,
+            Map<String, Map<String, Integer>> errorStatsBySamplerName
+    ) {
+        errorStatsBySamplerName.forEach((samplerName, errorsMeta) -> {
+            Map<String, String> tags = parseSamplerNameToTags(samplerName);
+            errorsMeta.forEach((errorDetail, statistic) -> {
+                tags.put("reason", errorDetail);
+                lpBuilder
+                        .appendLineProtocolMeasurement("error")
+                        .appendTags(tags)
+                        .appendLineProtocolField("count", statistic)
+                        .appendLineProtocolTimestampNs(toNsPrecision(System.currentTimeMillis()));
+            });
+        });
+
+        return lpBuilder;
+    }
+
 
     Map<String, String> buildTestEventTags(boolean isItStart) {
         return new TreeMap<>(

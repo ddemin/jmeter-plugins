@@ -100,8 +100,6 @@ class LineProtocolConverterTest {
                 " Service1 : GET/api/v1/test ",
                 new TreeMap<>(
                         Map.of(
-                                MetaTypeEnum.ERROR,
-                                Arrays.asList(new AbstractMap.SimpleEntry<>("description", "Http code 5xx: some error details")),
                                 MetaTypeEnum.LABEL,
                                 Arrays.asList(new AbstractMap.SimpleEntry<>("label1", "value 1 2 3"), new AbstractMap.SimpleEntry<>("label2", "5"))
                         )
@@ -111,8 +109,6 @@ class LineProtocolConverterTest {
                 " Service2 : GET/api/v1/test ",
                 new TreeMap<>(
                         Map.of(
-                                MetaTypeEnum.ERROR,
-                                Arrays.asList(new AbstractMap.SimpleEntry<>("description", "Http code 5xx: some error details 2")),
                                 MetaTypeEnum.LABEL,
                                 Arrays.asList(new AbstractMap.SimpleEntry<>("label11", "value 1 2 3"), new AbstractMap.SimpleEntry<>("label22", "6"))
                         )
@@ -121,35 +117,25 @@ class LineProtocolConverterTest {
         String[] strArray = converter.createBuilderForOperationsMetadata(metaMap)
                 .build()
                 .split(String.valueOf(CHAR_UNIX_NEW_LINE));
-        assertThat(strArray.length, is(6));
+        assertThat(strArray.length, is(4));
 
         assertThat(
                 strArray[0],
-                startsWith("error,execution=2-2-2-2,operation=get/api/v1/test,target=service1"
-                        + " description=\"Http code 5xx: some error details\" ")
-        );
-        assertThat(
-                strArray[1],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service1"
                         + " label1=\"value 1 2 3\" ")
         );
         assertThat(
-                strArray[2],
+                strArray[1],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service1"
                         + " label2=\"5\" ")
         );
         assertThat(
-                strArray[3],
-                startsWith("error,execution=2-2-2-2,operation=get/api/v1/test,target=service2"
-                        + " description=\"Http code 5xx: some error details 2\" ")
-        );
-        assertThat(
-                strArray[4],
+                strArray[2],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service2"
                         + " label11=\"value 1 2 3\" ")
         );
         assertThat(
-                strArray[5],
+                strArray[3],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service2"
                         + " label22=\"6\" ")
         );

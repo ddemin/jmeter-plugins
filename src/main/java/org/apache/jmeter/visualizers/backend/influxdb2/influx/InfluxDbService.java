@@ -84,8 +84,9 @@ public class InfluxDbService {
             LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage(), tr);
         }
 
-        this.statisticBuffer.clear();
-        this.metaBuffer.clear();
+        this.statisticBuffer.getStatisticBuffer().clear();
+        this.statisticBuffer.getErrorMessagesBuffer().clear();
+        this.metaBuffer.getBuffer().clear();
         this.labelsThatReported.clear();
         this.componentsVersion = null;
         this.areVersionsSent = false;
@@ -134,30 +135,32 @@ public class InfluxDbService {
 
     void sendOperationsMetrics() {
         try {
-            LOG.debug("Send operations metrics");
-
-            LineProtocolBuilder lineProtocolBuilderStats;
-            // Pause any new metrics collection during batch preparation
-            // Map instance == Map mutex instance (see SynchronizedMap code)
-            synchronized (statisticBuffer.getBuffer()) {
-                lineProtocolBuilderStats = converter.createBuilderForOperationsStatistic(statisticBuffer.getBuffer());
-                statisticBuffer.clear();
-            }
-
             LineProtocolBuilder lineProtocolBuilderMeta;
-            // Pause any new metrics collection during batch preparation
-            // Map instance == Map mutex instance (see SynchronizedMap code)
             synchronized (metaBuffer.getBuffer()) {
                 lineProtocolBuilderMeta = converter.createBuilderForOperationsMetadata(metaBuffer.getBuffer());
-                metaBuffer.clear();
+                metaBuffer.getBuffer().clear();
             }
 
-            if (lineProtocolBuilderStats.getRows() > 0) {
-                send(bucketOperationStats, lineProtocolBuilderStats.build());
+            synchronized (statisticBuffer.getErrorMessagesBuffer()) {
+                converter.enrichWithOperationsErrorsMetadata(
+                        lineProtocolBuilderMeta,
+                        statisticBuffer.getErrorMessagesBuffer()
+                );
+                statisticBuffer.getErrorMessagesBuffer().clear();
+            }
+
+            LineProtocolBuilder lineProtocolBuilderStats;
+            synchronized (statisticBuffer.getStatisticBuffer()) {
+                lineProtocolBuilderStats = converter.createBuilderForOperationsStatistic(statisticBuffer.getStatisticBuffer());
+                statisticBuffer.getStatisticBuffer().clear();
             }
 
             if (lineProtocolBuilderMeta.getRows() > 0) {
                 send(bucketOperationMeta, lineProtocolBuilderMeta.build());
+            }
+
+            if (lineProtocolBuilderStats.getRows() > 0) {
+                send(bucketOperationStats, lineProtocolBuilderStats.build());
             }
         } catch (Throwable tr) {
             LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage(), tr);

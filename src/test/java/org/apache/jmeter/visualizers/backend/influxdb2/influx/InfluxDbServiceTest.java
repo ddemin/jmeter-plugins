@@ -121,7 +121,7 @@ class InfluxDbServiceTest {
         resetAllRequests();
 
         fillBuffersWithTestData();
-        verifyOperationWriteRequests(1111);
+        verifyOperationWriteRequests(7);
     }
 
     @Test
@@ -162,21 +162,22 @@ class InfluxDbServiceTest {
                                             .withRequestBody(matching(".*(?:|\n)latency,execution=2-2-2-2,operation=operation2,target=service2 avg=2345.0,max=2345.0,min=2345.0,p50=2345.0,p95=2345.0,p99=2345.0 [0-9]+\\n.*"))
                                             .withRequestBody(matching(".*(?:|\n)load,execution=2-2-2-2,operation=operation2,target=service2 count=20.0,rate=4.0 [0-9]+\\n.*"))
                                             .withRequestBody(matching(".*(?:|\n)network,execution=2-2-2-2,operation=operation2,target=service2 avg=4000.0,max=4000.0,min=4000.0,p50=4000.0,p95=4000.0,p99=4000.0,rate=800.0 [0-9]+\\n.*"))
-                                            .withRequestBody(matching(".*(?:|\n)error,execution=2-2-2-2,operation=operation1,target=service1 count=10.0,rate=2.0,share=0.5 [0-9]+\\n.*"))
+                                            .withRequestBody(matching(".*(?:|\n)error,execution=2-2-2-2,operation=operation1,target=service1 count=12.0,rate=2.4,share=0.54545456 [0-9]+\\n.*"))
                                             .withRequestBody(matching(".*(?:|\n)latency,execution=2-2-2-2,operation=operation1,target=service1 avg=1234.0,max=1234.0,min=1234.0,p50=1234.0,p95=1234.0,p99=1234.0 [0-9]+\\n.*"))
-                                            .withRequestBody(matching(".*(?:|\n)load,execution=2-2-2-2,operation=operation1,target=service1 count=20.0,rate=4.0 [0-9]+\\n.*"))
-                                            .withRequestBody(matching(".*(?:|\n)network,execution=2-2-2-2,operation=operation1,target=service1 avg=2000.0,max=2000.0,min=2000.0,p50=2000.0,p95=2000.0,p99=2000.0,rate=800.0 [0-9]+\\n.*"))
+                                            .withRequestBody(matching(".*(?:|\n)load,execution=2-2-2-2,operation=operation1,target=service1 count=22.0,rate=4.4 [0-9]+\\n.*"))
+                                            .withRequestBody(matching(".*(?:|\n)network,execution=2-2-2-2,operation=operation1,target=service1 avg=1000.0,max=2000.0,min=0.0,p50=2000.0,p95=2000.0,p99=2000.0,rate=800.0 [0-9]+\\n.*"))
                             );
 
                             verifyCountOfWriteRequests(1, "operationMeta");
                             verify(
                                     1,
                                     getPatternForWriteRequestToBucket("operationMeta")
-                                            .withRequestBody(matching(".+\\n.+\\n.+\\n.+\\n"))
+                                            .withRequestBody(matching(".+\\n.+\\n.+\\n.+\\n.+\\n"))
                                             .withRequestBody(matching(".*(?:|\n)label,execution=2-2-2-2,operation=operation1,target=service1 somelabel=\"somevalue\" [0-9]+\\n.*"))
                                             .withRequestBody(matching(".*(?:|\n)label,execution=2-2-2-2,operation=operation1,target=service1 justlabel=\"undefined\" [0-9]+\\n.*"))
-                                            .withRequestBody(matching(".*(?:|\n)error,execution=2-2-2-2,operation=operation1,target=service1 description=\"Error code 504: undefined\" [0-9]+\\n.*"))
-                                            .withRequestBody(matching(".*(?:|\n)error,execution=2-2-2-2,operation=operation1,target=service1 description=\"Error code 501: undefined\" [0-9]+\\n.*"))
+                                            .withRequestBody(matching(".*(?:|\n)error,execution=2-2-2-2,operation=operation1,reason=Error.+code.+504:.+undefined,target=service1 count=2i [0-9]+\\n.*"))
+                                            .withRequestBody(matching(".*(?:|\n)error,execution=2-2-2-2,operation=operation1,reason=undefined,target=service1 count=2i [0-9]+\\n.*"))
+                                            .withRequestBody(matching(".*(?:|\n)error,execution=2-2-2-2,operation=operation2,reason=undefined,target=service2 count=1i [0-9]+\\n.*"))
                             );
                         }
                 );
@@ -188,14 +189,14 @@ class InfluxDbServiceTest {
         withDigitCode.setSampleLabel(labelWithDigitCode);
         withDigitCode.setSuccessful(false);
         withDigitCode.setResponseCode("504");
-        metaBuffer.putErrorMeta(withDigitCode);
+        statisticBuffer.putMetric(withDigitCode);
 
         SampleResult withDigitCode2 = new SampleResult(System.currentTimeMillis(), 1234L);
         String labelWithDigitCode2 = "service1: operation1";
         withDigitCode2.setSampleLabel(labelWithDigitCode2);
         withDigitCode2.setSuccessful(false);
-        withDigitCode2.setResponseCode("501");
-        metaBuffer.putErrorMeta(withDigitCode2);
+        withDigitCode2.setResponseCode("504");
+        statisticBuffer.putMetric(withDigitCode2);
 
         SampleResult sample = new SampleResult(System.currentTimeMillis(), 1234L);
         String label = "service1: operation1";

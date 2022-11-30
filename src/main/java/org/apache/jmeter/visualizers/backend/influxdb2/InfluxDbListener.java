@@ -45,10 +45,6 @@ public class InfluxDbListener implements BackendListenerClient {
                 .forEach(
                         result -> {
                             operationsStatisticBuffer.putMetric(result);
-
-                            if (!result.isSuccessful()) {
-                                operationsMetaBuffer.putErrorMeta(result);
-                            }
                         }
                 );
     }
