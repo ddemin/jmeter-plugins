@@ -121,7 +121,7 @@ public class InfluxDbService {
         if (samplersLabels != null && samplersLabelsHash != samplersLabels.hashCode()) {
             samplersLabelsHash = samplersLabels.hashCode();
 
-            Map<String, String> labelsMap = parseStringToMap(
+            Map<String, String> labelsMap = toMapWithLowerCaseKey(
                     samplersLabels, DELIMITER_SAMPLERS_LABELS_ITEMS, DELIMITER_SAMPLERS_LABELS_KV
             );
             labelsMap.forEach((key, value) -> {

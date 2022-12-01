@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.apache.jmeter.visualizers.backend.influxdb2.util.Utils.parseStringToMap;
+import static org.apache.jmeter.visualizers.backend.influxdb2.util.Utils.toMapWithLowerCaseKey;
 
 public class OperationMetaBuffer {
 
@@ -24,7 +24,7 @@ public class OperationMetaBuffer {
         getResultBucket(sampleName)
                 .computeIfAbsent(MetaTypeEnum.LABEL, k -> Collections.synchronizedList(new ArrayList<>()))
                 .addAll(
-                        parseStringToMap(labels).entrySet().stream().toList()
+                        toMapWithLowerCaseKey(labels).entrySet().stream().toList()
                 );
     }
 

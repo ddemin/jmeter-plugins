@@ -94,7 +94,7 @@ class InfluxDbServiceTest {
                                 matching(
                                         "execution,environment=env1,hostname=host1,is_it_start=true,test=1-1-1-1 uuid=\"2-2-2-2\" [0-9]+\\n"
                                                 + "label,test=1-1-1-1 details=\"some details\",name=\"some name\",profile=\"profile1\",user-label1=\"value1\",user-label2=\"value2\" [0-9]+\\n"
-                                                + "variable,test=1-1-1-1 warmup_sec=60i,period_sec=5i,VARIABLE_1=\"value 1\",VARIABLE_2=\"value 2\" [0-9]+\\n"
+                                                + "variable,test=1-1-1-1 warmup_sec=60i,period_sec=5i,variable_1=\"value 1\",variable_2=\"value 2\" [0-9]+\\n"
                                 )
                         )
         );

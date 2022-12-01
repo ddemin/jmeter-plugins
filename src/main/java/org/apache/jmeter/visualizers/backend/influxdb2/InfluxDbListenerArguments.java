@@ -114,7 +114,7 @@ public class InfluxDbListenerArguments extends Arguments {
         this.testname = context.getParameter(ARG_NAME);
         this.loadprofile = context.getParameter(ARG_PROFILE);
         this.details = context.getParameter(ARG_DETAILS);
-        this.additionalLabels = Utils.parseStringToMap(
+        this.additionalLabels = Utils.toMapWithLowerCaseKey(
                 context.getParameter(InfluxDbListenerArguments.ARG_LABELS_ADDITIONAL)
         );
 

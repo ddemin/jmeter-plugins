@@ -94,13 +94,13 @@ public class LineProtocolConverter {
                                 e ->
                                         e.getValue() == null
                                                 ? new AbstractMap.SimpleEntry<>(e.getKey(), (Object) UNDEFINED)
-                                                : e
+                                                : new AbstractMap.SimpleEntry<>(e.getKey().toLowerCase(), e.getValue())
                         )
                         .map(
                                 e ->
                                         (e.getValue() instanceof String && StringUtils.isEmpty((String) e.getValue()))
                                                 ? new AbstractMap.SimpleEntry<>(e.getKey(), (Object) UNDEFINED)
-                                                : e
+                                                : new AbstractMap.SimpleEntry<>(e.getKey().toLowerCase(), e.getValue())
                         )
                         .forEach(variableFields::add);
             }
@@ -116,7 +116,7 @@ public class LineProtocolConverter {
     }
 
     public LineProtocolBuilder createBuilderForVersions(String versions) {
-        List<Map.Entry<String, Object>> versionsByComponent = parseStringToMap(versions)
+        List<Map.Entry<String, Object>> versionsByComponent = toMapWithLowerCaseKey(versions)
                 .entrySet()
                 .stream()
                 .map(
@@ -127,7 +127,7 @@ public class LineProtocolConverter {
                             } else {
                                 return (Map.Entry<String, Object>) new AbstractMap.SimpleEntry<String, Object>(
                                         entry.getKey().toLowerCase(),
-                                        entry.getValue().trim().toLowerCase()
+                                        entry.getValue().trim()
                                 );
                             }
                         }

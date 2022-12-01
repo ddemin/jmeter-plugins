@@ -25,12 +25,16 @@ public class Utils {
     }
 
     @NotNull
-    public static Map<String, String> parseStringToMap(String text) {
-        return parseStringToMap(text, DELIMITER_LIST_ITEM, DELIMITER_KEY_VALUE);
+    public static Map<String, String> toMapWithLowerCaseKey(String text) {
+        return toMapWithLowerCaseKey(text, DELIMITER_LIST_ITEM, DELIMITER_KEY_VALUE);
     }
 
     @NotNull
-    public static Map<String, String> parseStringToMap(String text, String itemsDelimiter, String keyValueDelimiter) {
+    public static Map<String, String> toMapWithLowerCaseKey(
+            String text,
+            String itemsDelimiter,
+            String keyValueDelimiter
+    ) {
         return Arrays
                 .stream(text.trim().split(itemsDelimiter))
                 .filter(StringUtils::isNoneEmpty)
@@ -42,12 +46,12 @@ public class Utils {
                                 return null;
                             } else if (arr.length == 2) {
                                 return new AbstractMap.SimpleEntry<>(
-                                        arr[0].trim(),
+                                        arr[0].trim().toLowerCase(),
                                         arr[1].trim()
                                 );
                             } else if (arr.length == 1) {
                                 return new AbstractMap.SimpleEntry<>(
-                                        arr[0].trim(),
+                                        arr[0].trim().toLowerCase(),
                                         UNDEFINED
                                 );
                             } else {

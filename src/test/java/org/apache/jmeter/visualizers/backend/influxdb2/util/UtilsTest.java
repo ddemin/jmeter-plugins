@@ -21,15 +21,15 @@ class UtilsTest {
 
     @Test
     public void parseStringToMap() {
-        String mapAsString = "test1:vALUe1  , TEST2 :  value2,,test3";
-        Map<String, String> actualMap = Utils.parseStringToMap(mapAsString);
+        String mapAsString = "test1:vALUe1  , TeST2 :  value2,,teST3";
+        Map<String, String> actualMap = Utils.toMapWithLowerCaseKey(mapAsString);
 
         assertThat(
                 actualMap,
                 allOf(
                         aMapWithSize(3),
                         hasEntry("test1", "vALUe1"),
-                        hasEntry("TEST2", "value2"),
+                        hasEntry("test2", "value2"),
                         hasEntry("test3", UNDEFINED)
                 )
         );
