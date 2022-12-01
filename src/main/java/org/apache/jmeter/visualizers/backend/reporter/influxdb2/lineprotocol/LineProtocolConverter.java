@@ -55,12 +55,14 @@ public class LineProtocolConverter {
 
     public LineProtocolBuilder createBuilderForTestMetadata(
             boolean isItStarted,
-            Map<String, Object> additionalVariables
+            Map<String, Object> additionalVariables,
+            long timestampNs
     ) {
         LineProtocolBuilder protocolBuilder = LineProtocolBuilder.withFirstRow(
                 "execution",
                 buildTestEventTags(isItStarted),
-                List.of(new AbstractMap.SimpleEntry<>("uuid", executionUuid))
+                List.of(new AbstractMap.SimpleEntry<>("uuid", executionUuid)),
+                timestampNs
         );
 
         if (isItStarted) {
@@ -80,7 +82,8 @@ public class LineProtocolConverter {
             protocolBuilder.appendRowWithTextFields(
                     "label",
                     tags,
-                    labelFields
+                    labelFields,
+                    timestampNs
             );
 
             final ArrayList<Map.Entry<String, Object>> variableFields = new ArrayList<>();
@@ -108,14 +111,15 @@ public class LineProtocolConverter {
             protocolBuilder.appendRow(
                     "variable",
                     tags,
-                    variableFields
+                    variableFields,
+                    timestampNs
             );
         }
 
         return protocolBuilder;
     }
 
-    public LineProtocolBuilder createBuilderForVersions(String versions) {
+    public LineProtocolBuilder createBuilderForVersions(String versions, long timestampNs) {
         List<Map.Entry<String, Object>> versionsByComponent = toMapWithLowerCaseKey(versions)
                 .entrySet()
                 .stream()
@@ -139,7 +143,8 @@ public class LineProtocolConverter {
         return LineProtocolBuilder.withFirstRow(
                 "version",
                 buildTestMetaTags(),
-                versionsByComponent
+                versionsByComponent,
+                timestampNs
         );
     }
 

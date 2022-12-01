@@ -43,7 +43,9 @@ class LineProtocolConverterTest {
 
     @Test
     void lpStringTestStarted() {
-        String[] strArray = converter.createBuilderForTestMetadata(true, additionalVars)
+        String[] strArray = converter.createBuilderForTestMetadata(
+                        true, additionalVars, toNsPrecision(System.currentTimeMillis())
+                )
                 .build()
                 .split(String.valueOf(CHAR_UNIX_NEW_LINE));
 
@@ -68,7 +70,9 @@ class LineProtocolConverterTest {
 
     @Test
     void lpStringForTestFinished() {
-        String[] strArray = converter.createBuilderForTestMetadata(false, additionalVars)
+        String[] strArray = converter.createBuilderForTestMetadata(
+                        false, additionalVars, toNsPrecision(System.currentTimeMillis())
+                )
                 .build()
                 .split(String.valueOf(CHAR_UNIX_NEW_LINE));
 
@@ -83,7 +87,7 @@ class LineProtocolConverterTest {
     @Test
     void lpStringForVersions() {
         String versionsRaw = " service 1 : version 1.2.3,service 2 a b c : version 5";
-        String[] strArray = converter.createBuilderForVersions(versionsRaw)
+        String[] strArray = converter.createBuilderForVersions(versionsRaw, toNsPrecision(System.currentTimeMillis()))
                 .build()
                 .split(String.valueOf(CHAR_UNIX_NEW_LINE));
 

@@ -8,6 +8,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.jmeter.visualizers.backend.reporter.util.Utils.toNsPrecision;
+
 public class MetricsReportServiceScheduledTrigger implements Runnable {
     private static final Logger LOG = LoggerFactory.getLogger(MetricsReportServiceScheduledTrigger.class);
 
@@ -25,12 +27,14 @@ public class MetricsReportServiceScheduledTrigger implements Runnable {
 
     @Override
     public void run() {
-        reporterService.collectAndSendVersions();
         reporterService.collectOperationsLabels();
 
-        reporterService.sendOperationsMetrics();
+        long timestampNs = toNsPrecision(System.currentTimeMillis());
+        reporterService.collectAndSendVersions(timestampNs);
 
-        reporterService.processRetryQueue();
+        reporterService.sendOperationsMetrics(timestampNs);
+
+        reporterService.retryFailedRequests();
     }
 
     public void init() {

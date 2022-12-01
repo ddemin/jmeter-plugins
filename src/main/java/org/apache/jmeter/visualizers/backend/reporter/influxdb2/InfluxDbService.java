@@ -54,65 +54,73 @@ public class InfluxDbService extends AbstractMetricsReportService {
         super.init();
     }
 
-    public void processRetryQueue() {
+    public void retryFailedRequests() {
         influxClient.processRetryQueue();
     }
 
-    public void sendVersions(String versions) {
+    public void sendVersions(String versions, long timestampNs) {
         LOG.info("Send versions metadata");
-        LineProtocolBuilder builder = converter.createBuilderForVersions(versions);
+        LineProtocolBuilder builder = converter.createBuilderForVersions(versions, timestampNs);
         send(bucketTestMeta, builder.build());
     }
 
-    public void sendFinishEvent() {
+    public void sendFinishEvent(long timestampNs) {
         LOG.info("Send 'test finished' event");
-        LineProtocolBuilder builder = converter.createBuilderForTestMetadata(false, null);
+        LineProtocolBuilder builder = converter.createBuilderForTestMetadata(false, null, timestampNs);
         send(bucketTestMeta, builder.build());
     }
 
-    public void sendStartEventAndMetadata(Map<String, Object> additionalVariables) {
+    public void sendStartEventAndMetadata(Map<String, Object> additionalVariables, long timestampNs) {
         LOG.info("Send 'test started' event and meta data");
-        LineProtocolBuilder builder = converter.createBuilderForTestMetadata(true, additionalVariables);
+        LineProtocolBuilder builder = converter.createBuilderForTestMetadata(true, additionalVariables, timestampNs);
         send(bucketTestMeta, builder.build());
     }
 
-    public void packAndSendOperationsStatistic(long timestampNs) {
-        LineProtocolBuilder lineProtocolBuilderStats;
-        synchronized (getStatisticBuffer().getBuffer()) {
-            lineProtocolBuilderStats = converter.createBuilderForOperationsStatistic(
-                    getStatisticBuffer().getBuffer(),
-                    timestampNs
-            );
-            this.getStatisticBuffer().clear();
-        }
-
-        if (lineProtocolBuilderStats.getRows() > 0) {
-            send(bucketOperationStats, lineProtocolBuilderStats.build());
-        }
-    }
-
-    public void packAndSendOperationsMetadata(long timestampNs) {
+    @Override
+    protected void packAndSendOperationsMetadata(
+            long timestampNs, OperationMetaBuffer buffer, OperationErrorsBuffer errorsBuffer
+    ) {
         LineProtocolBuilder lineProtocolBuilderMeta;
-        synchronized (getMetaBuffer().getBuffer()) {
+        // TODO Move critical section to abstract class somehow
+        synchronized (buffer.getBuffer()) {
             lineProtocolBuilderMeta = converter.createBuilderForOperationsMetadata(
-                    getMetaBuffer().getBuffer(),
+                    buffer.getBuffer(),
                     timestampNs
             );
-            this.getMetaBuffer().clear();
+            buffer.clear();
         }
 
-        synchronized (getErrorsBuffer().getBuffer()) {
+        // TODO Move critical section to abstract class somehow
+        synchronized (errorsBuffer.getBuffer()) {
             converter.enrichWithOperationsErrorsMetadata(
                     lineProtocolBuilderMeta,
-                    getErrorsBuffer().getBuffer(),
+                    errorsBuffer.getBuffer(),
                     timestampNs
             );
-            this.getErrorsBuffer().clear();
+            errorsBuffer.clear();
         }
 
         if (lineProtocolBuilderMeta.getRows() > 0) {
             send(bucketOperationMeta, lineProtocolBuilderMeta.build());
         }
+    }
+
+    @Override
+    protected void packAndSendOperationsStatistic(long timestampNs, OperationStatisticBuffer buffer) {
+        LineProtocolBuilder lineProtocolBuilderStats;
+        // TODO Move critical section to abstract class somehow
+        synchronized (buffer.getBuffer()) {
+            lineProtocolBuilderStats = converter.createBuilderForOperationsStatistic(
+                    buffer.getBuffer(),
+                    timestampNs
+            );
+            buffer.clear();
+        }
+
+        if (lineProtocolBuilderStats.getRows() > 0) {
+            send(bucketOperationStats, lineProtocolBuilderStats.build());
+        }
+
     }
 
     void send(String bucket, String content) {

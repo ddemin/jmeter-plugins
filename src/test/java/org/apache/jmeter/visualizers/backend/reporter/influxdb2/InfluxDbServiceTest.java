@@ -21,6 +21,7 @@ import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static org.apache.jmeter.visualizers.backend.reporter.util.Utils.toNsPrecision;
 import static org.awaitility.Awaitility.await;
 
 @WireMockTest(httpPort = 8078)
@@ -106,7 +107,9 @@ class InfluxDbServiceTest {
 
     @Test
     void sendVersions() {
-        influxDbService.sendVersions("  service1 : ver123 , service2: 234  ");
+        influxDbService.sendVersions(
+                "  service1 : ver123 , service2: 234  ", toNsPrecision(System.currentTimeMillis())
+        );
 
         verify(
                 getPatternForWriteRequestToBucket("testMeta")

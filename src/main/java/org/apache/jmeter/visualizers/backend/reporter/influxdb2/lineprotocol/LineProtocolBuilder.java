@@ -18,26 +18,20 @@ public class LineProtocolBuilder {
     public static LineProtocolBuilder withFirstRow(
             String measurement,
             Map<String, String> tags,
-            List<Map.Entry<String, Object>> fields
+            List<Map.Entry<String, Object>> fields,
+            long ... timestampNs
     ) {
         return new LineProtocolBuilder()
                 .appendLineProtocolMeasurement(measurement)
                 .appendTags(tags)
                 .appendLineProtocolFields(fields)
-                .appendLineProtocolTimestampNs(toNsPrecision(Instant.now().toEpochMilli()));
+                .appendLineProtocolTimestampNs(
+                        timestampNs.length == 0 ? getCurrentTimestampNs() : timestampNs[0]
+                );
     }
 
-    public static LineProtocolBuilder withFirstRow(
-            String measurement,
-            Map<String, String> tags,
-            String fieldName,
-            Object fieldValue
-    ) {
-        return new LineProtocolBuilder()
-                .appendLineProtocolMeasurement(measurement)
-                .appendTags(tags)
-                .appendLineProtocolField(fieldName, fieldValue)
-                .appendLineProtocolTimestampNs(toNsPrecision(Instant.now().toEpochMilli()));
+    private static long getCurrentTimestampNs() {
+        return toNsPrecision(Instant.now().toEpochMilli());
     }
 
     public String build() {
@@ -51,38 +45,31 @@ public class LineProtocolBuilder {
     public LineProtocolBuilder appendRowWithTextFields(
             String measurement,
             Map<String, String> tags,
-            List<Map.Entry<String, String>> fields
+            List<Map.Entry<String, String>> fields,
+            long ... timestampNs
     ) {
         return this
                 .appendLineProtocolMeasurement(measurement)
                 .appendTags(tags)
                 .appendLineProtocolStrFields(fields)
-                .appendLineProtocolTimestampNs(toNsPrecision(Instant.now().toEpochMilli()));
+                .appendLineProtocolTimestampNs(
+                        timestampNs.length == 0 ? getCurrentTimestampNs() : timestampNs[0]
+                );
     }
 
     public LineProtocolBuilder appendRow(
             String measurement,
             Map<String, String> tags,
-            String fieldName,
-            Object fieldValue
-    ) {
-        return this
-                .appendLineProtocolMeasurement(measurement)
-                .appendTags(tags)
-                .appendLineProtocolField(fieldName, fieldValue)
-                .appendLineProtocolTimestampNs(toNsPrecision(Instant.now().toEpochMilli()));
-    }
-
-    public LineProtocolBuilder appendRow(
-            String measurement,
-            Map<String, String> tags,
-            List<Map.Entry<String, Object>> fields
+            List<Map.Entry<String, Object>> fields,
+            long ... timestampNs
     ) {
         return this
                 .appendLineProtocolMeasurement(measurement)
                 .appendTags(tags)
                 .appendLineProtocolFields(fields)
-                .appendLineProtocolTimestampNs(toNsPrecision(Instant.now().toEpochMilli()));
+                .appendLineProtocolTimestampNs(
+                        timestampNs.length == 0 ? getCurrentTimestampNs() : timestampNs[0]
+                );
     }
 
     public LineProtocolBuilder appendTags(Map<String, String> tags) {
@@ -262,11 +249,6 @@ public class LineProtocolBuilder {
                 .append(key)
                 .append('=')
                 .append(value);
-        return this;
-    }
-
-    public LineProtocolBuilder appendLine(String text) {
-        stringBuilder.append(text);
         return this;
     }
 

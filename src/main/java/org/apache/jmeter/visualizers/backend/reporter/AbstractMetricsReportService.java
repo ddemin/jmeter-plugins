@@ -34,12 +34,16 @@ public abstract class AbstractMetricsReportService {
     private String componentsVersion;
     private boolean areVersionsSent;
 
-    public abstract void processRetryQueue();
-    protected abstract void sendStartEventAndMetadata(Map<String, Object> additionalTestMetadataVariables);
-    protected abstract void sendFinishEvent();
-    protected abstract void packAndSendOperationsMetadata(long timestampNs);
-    protected abstract void packAndSendOperationsStatistic(long timestampNs);
-    protected abstract void sendVersions(String componentsVersion);
+    public abstract void retryFailedRequests();
+    protected abstract void sendStartEventAndMetadata(
+            Map<String, Object> additionalTestMetadataVariables, long timestampNs
+    );
+    protected abstract void sendFinishEvent(long timestampNs);
+    protected abstract void packAndSendOperationsMetadata(
+            long timestampNs, OperationMetaBuffer buffer, OperationErrorsBuffer errorsBuffer
+    );
+    protected abstract void packAndSendOperationsStatistic(long timestampNs, OperationStatisticBuffer buffer);
+    protected abstract void sendVersions(String componentsVersion, long timestampNs);
 
     public AbstractMetricsReportService(
             OperationStatisticBuffer statisticBuffer,
@@ -54,19 +58,7 @@ public abstract class AbstractMetricsReportService {
     }
 
     protected void init() {
-        sendStartEventAndMetadata(additionalTestMetadataVariables);
-    }
-
-    protected OperationStatisticBuffer getStatisticBuffer() {
-        return statisticBuffer;
-    }
-
-    protected OperationErrorsBuffer getErrorsBuffer() {
-        return errorsBuffer;
-    }
-
-    protected OperationMetaBuffer getMetaBuffer() {
-        return metaBuffer;
+        sendStartEventAndMetadata(additionalTestMetadataVariables, toNsPrecision(System.currentTimeMillis()));
     }
 
     void destroy() {
@@ -74,13 +66,13 @@ public abstract class AbstractMetricsReportService {
 
         try {
             Thread.sleep(PAUSE_BEFORE_LAST_BATCH_MS);
-            sendOperationsMetrics();
+            sendOperationsMetrics(toNsPrecision(System.currentTimeMillis()));
         } catch (Throwable tr) {
             LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage(), tr);
         }
 
         try {
-            sendFinishEvent();
+            sendFinishEvent(toNsPrecision(System.currentTimeMillis()));
         } catch (Throwable tr) {
             LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage(), tr);
         }
@@ -123,26 +115,24 @@ public abstract class AbstractMetricsReportService {
         }
     }
 
-    void sendOperationsMetrics() {
+    void sendOperationsMetrics(long timestampNs) {
         try {
-            long timestampNs = toNsPrecision(System.currentTimeMillis());
+            packAndSendOperationsMetadata(timestampNs, metaBuffer, errorsBuffer);
 
-            packAndSendOperationsMetadata(timestampNs);
-
-            packAndSendOperationsStatistic(timestampNs);
+            packAndSendOperationsStatistic(timestampNs, statisticBuffer);
 
         } catch (Throwable tr) {
             LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage(), tr);
         }
     }
 
-    void collectAndSendVersions() {
+    void collectAndSendVersions(long timestampNs) {
         if (!areVersionsSent && isComponentsVersionsDefined()) {
             LOG.info(
                     "Property '" + VERSIONS_PROPERTY_NAME + "' with components versions was detected. Send versions: "
                             + componentsVersion
             );
-            sendVersions(componentsVersion);
+            sendVersions(componentsVersion, timestampNs);
             areVersionsSent = true;
         }
     }
