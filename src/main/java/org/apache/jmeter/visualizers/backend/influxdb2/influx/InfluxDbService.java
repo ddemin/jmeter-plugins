@@ -106,7 +106,7 @@ public class InfluxDbService {
         influxClient.processRetryQueue();
     }
 
-    // TODO Write the unit-test
+    // TODO unit test
     void collectOperationsLabels() {
         String samplersLabels = null;
         try {
@@ -135,33 +135,12 @@ public class InfluxDbService {
 
     void sendOperationsMetrics() {
         try {
-            LineProtocolBuilder lineProtocolBuilderMeta;
-            synchronized (metaBuffer.getBuffer()) {
-                lineProtocolBuilderMeta = converter.createBuilderForOperationsMetadata(metaBuffer.getBuffer());
-                metaBuffer.getBuffer().clear();
-            }
+            long timestampNs = toNsPrecision(System.currentTimeMillis());
 
-            synchronized (statisticBuffer.getErrorMessagesBuffer()) {
-                converter.enrichWithOperationsErrorsMetadata(
-                        lineProtocolBuilderMeta,
-                        statisticBuffer.getErrorMessagesBuffer()
-                );
-                statisticBuffer.getErrorMessagesBuffer().clear();
-            }
+            packAndSendOperationsMetadata(timestampNs);
 
-            LineProtocolBuilder lineProtocolBuilderStats;
-            synchronized (statisticBuffer.getStatisticBuffer()) {
-                lineProtocolBuilderStats = converter.createBuilderForOperationsStatistic(statisticBuffer.getStatisticBuffer());
-                statisticBuffer.getStatisticBuffer().clear();
-            }
+            packAndSendOperationsStatistic(timestampNs);
 
-            if (lineProtocolBuilderMeta.getRows() > 0) {
-                send(bucketOperationMeta, lineProtocolBuilderMeta.build());
-            }
-
-            if (lineProtocolBuilderStats.getRows() > 0) {
-                send(bucketOperationStats, lineProtocolBuilderStats.build());
-            }
         } catch (Throwable tr) {
             LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage(), tr);
         }
@@ -207,6 +186,45 @@ public class InfluxDbService {
             );
             sendVersions(componentsVersion);
             areVersionsSent = true;
+        }
+    }
+
+    void packAndSendOperationsStatistic(long timestampNs) {
+        LineProtocolBuilder lineProtocolBuilderStats;
+        synchronized (statisticBuffer.getStatisticBuffer()) {
+            lineProtocolBuilderStats = converter.createBuilderForOperationsStatistic(
+                    statisticBuffer.getStatisticBuffer(),
+                    timestampNs
+            );
+            statisticBuffer.getStatisticBuffer().clear();
+        }
+
+        if (lineProtocolBuilderStats.getRows() > 0) {
+            send(bucketOperationStats, lineProtocolBuilderStats.build());
+        }
+    }
+
+    void packAndSendOperationsMetadata(long timestampNs) {
+        LineProtocolBuilder lineProtocolBuilderMeta;
+        synchronized (metaBuffer.getBuffer()) {
+            lineProtocolBuilderMeta = converter.createBuilderForOperationsMetadata(
+                    metaBuffer.getBuffer(),
+                    timestampNs
+            );
+            metaBuffer.getBuffer().clear();
+        }
+
+        synchronized (statisticBuffer.getErrorMessagesBuffer()) {
+            converter.enrichWithOperationsErrorsMetadata(
+                    lineProtocolBuilderMeta,
+                    statisticBuffer.getErrorMessagesBuffer(),
+                    timestampNs
+            );
+            statisticBuffer.getErrorMessagesBuffer().clear();
+        }
+
+        if (lineProtocolBuilderMeta.getRows() > 0) {
+            send(bucketOperationMeta, lineProtocolBuilderMeta.build());
         }
     }
 

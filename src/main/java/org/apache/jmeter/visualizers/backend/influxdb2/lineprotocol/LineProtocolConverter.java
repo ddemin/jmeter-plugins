@@ -144,7 +144,8 @@ public class LineProtocolConverter {
     }
 
     public LineProtocolBuilder createBuilderForOperationsStatistic(
-            Map<String, Map<StatisticTypeEnum, StatisticCounter>> statisticsByMetricName
+            Map<String, Map<StatisticTypeEnum, StatisticCounter>> statisticsByMetricName,
+            long timestampNs
     ) {
         LineProtocolBuilder lpBuilder = new LineProtocolBuilder();
 
@@ -187,7 +188,7 @@ public class LineProtocolConverter {
                                         );
                                     }
                                 }
-                                lpBuilder.appendLineProtocolTimestampNs(toNsPrecision(System.currentTimeMillis()));
+                                lpBuilder.appendLineProtocolTimestampNs(timestampNs);
                             }
                     );
                 });
@@ -196,10 +197,10 @@ public class LineProtocolConverter {
     }
 
     public LineProtocolBuilder createBuilderForOperationsMetadata(
-            Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> metaByMetricName
+            Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> metaByMetricName,
+            long timestampNs
     ) {
         LineProtocolBuilder lpBuilder = new LineProtocolBuilder();
-
         metaByMetricName.forEach((samplerName, metricMeta) -> {
             Map<String, String> tags = parseSamplerNameToTags(samplerName);
             metricMeta.forEach((metric, meta) -> {
@@ -212,7 +213,7 @@ public class LineProtocolConverter {
                                                 entry.getKey(),
                                                 StringUtils.isEmpty(entry.getValue()) ? UNDEFINED : entry.getValue()
                                         )
-                                        .appendLineProtocolTimestampNs(toNsPrecision(System.currentTimeMillis()))
+                                        .appendLineProtocolTimestampNs(timestampNs)
                 );
             });
         });
@@ -220,9 +221,11 @@ public class LineProtocolConverter {
         return lpBuilder;
     }
 
+    // TODO unit test
     public LineProtocolBuilder enrichWithOperationsErrorsMetadata(
             @NotNull LineProtocolBuilder lpBuilder,
-            Map<String, Map<String, Integer>> errorStatsBySamplerName
+            Map<String, Map<String, Integer>> errorStatsBySamplerName,
+            long timestampNs
     ) {
         errorStatsBySamplerName.forEach((samplerName, errorsMeta) -> {
             Map<String, String> tags = parseSamplerNameToTags(samplerName);
@@ -232,7 +235,7 @@ public class LineProtocolConverter {
                         .appendLineProtocolMeasurement("error")
                         .appendTags(tags)
                         .appendLineProtocolField("count", statistic)
-                        .appendLineProtocolTimestampNs(toNsPrecision(System.currentTimeMillis()));
+                        .appendLineProtocolTimestampNs(timestampNs);
             });
         });
 

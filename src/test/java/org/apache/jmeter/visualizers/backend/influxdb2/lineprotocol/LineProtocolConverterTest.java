@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 
 import static org.apache.jmeter.visualizers.backend.influxdb2.lineprotocol.LineProtocolBuilder.CHAR_UNIX_NEW_LINE;
+import static org.apache.jmeter.visualizers.backend.influxdb2.util.Utils.toNsPrecision;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.startsWith;
@@ -114,7 +115,8 @@ class LineProtocolConverterTest {
                         )
                 )
         );
-        String[] strArray = converter.createBuilderForOperationsMetadata(metaMap)
+        long timestampNs = toNsPrecision(System.currentTimeMillis());
+        String[] strArray = converter.createBuilderForOperationsMetadata(metaMap, timestampNs)
                 .build()
                 .split(String.valueOf(CHAR_UNIX_NEW_LINE));
         assertThat(strArray.length, is(4));
@@ -122,22 +124,22 @@ class LineProtocolConverterTest {
         assertThat(
                 strArray[0],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service1"
-                        + " label1=\"value 1 2 3\" ")
+                        + " label1=\"value 1 2 3\" " + timestampNs)
         );
         assertThat(
                 strArray[1],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service1"
-                        + " label2=\"5\" ")
+                        + " label2=\"5\" " + timestampNs)
         );
         assertThat(
                 strArray[2],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service2"
-                        + " label11=\"value 1 2 3\" ")
+                        + " label11=\"value 1 2 3\" " + timestampNs)
         );
         assertThat(
                 strArray[3],
                 startsWith("label,execution=2-2-2-2,operation=get/api/v1/test,target=service2"
-                        + " label22=\"6\" ")
+                        + " label22=\"6\" " + timestampNs)
         );
     }
 
@@ -187,7 +189,8 @@ class LineProtocolConverterTest {
                         )
                 )
         );
-        String[] strArray = converter.createBuilderForOperationsStatistic(metaMap)
+        long timestampNs = toNsPrecision(System.currentTimeMillis());
+        String[] strArray = converter.createBuilderForOperationsStatistic(metaMap, timestampNs)
                 .build()
                 .split(String.valueOf(CHAR_UNIX_NEW_LINE));
 
@@ -196,43 +199,51 @@ class LineProtocolConverterTest {
         assertThat(
                 strArray[0],
                 startsWith("latency,execution=2-2-2-2,operation=get/api/v1/test,target=service1 "
-                        + "avg=505.0,max=1000.0,min=10.0,p50=510.0,p95=960.0,p99=1000.0 ")
+                        + "avg=505.0,max=1000.0,min=10.0,p50=510.0,p95=960.0,p99=1000.0 "
+                        + timestampNs)
         );
         assertThat(
                 strArray[1],
                 startsWith("load,execution=2-2-2-2,operation=get/api/v1/test,target=service1 "
-                        + "count=200.0,rate=6.6666665 ")
+                        + "count=200.0,rate=6.6666665 "
+                        + timestampNs)
         );
         assertThat(
                 strArray[2],
                 startsWith("error,execution=2-2-2-2,operation=get/api/v1/test,target=service1 "
-                        + "count=50.0,rate=1.6666666,share=0.5 ")
+                        + "count=50.0,rate=1.6666666,share=0.5 "
+                        + timestampNs)
         );
         assertThat(
                 strArray[3],
                 startsWith("network,execution=2-2-2-2,operation=get/api/v1/test,target=service1 "
-                        + "avg=5050.0,max=10000.0,min=100.0,p50=5100.0,p95=9600.0,p99=10000.0,rate=16833.334 ")
+                        + "avg=5050.0,max=10000.0,min=100.0,p50=5100.0,p95=9600.0,p99=10000.0,rate=16833.334 "
+                        + timestampNs)
         );
 
         assertThat(
                 strArray[4],
                 startsWith("latency,execution=2-2-2-2,operation=get/api/v1/test,target=service2 "
-                        + "avg=505.0,max=1000.0,min=10.0,p50=510.0,p95=960.0,p99=1000.0 ")
+                        + "avg=505.0,max=1000.0,min=10.0,p50=510.0,p95=960.0,p99=1000.0 "
+                        + timestampNs)
         );
         assertThat(
                 strArray[5],
                 startsWith("load,execution=2-2-2-2,operation=get/api/v1/test,target=service2 "
-                        + "count=200.0,rate=6.6666665 ")
+                        + "count=200.0,rate=6.6666665 "
+                        + timestampNs)
         );
         assertThat(
                 strArray[6],
                 startsWith("error,execution=2-2-2-2,operation=get/api/v1/test,target=service2 "
-                        + "count=50.0,rate=1.6666666,share=0.5 ")
+                        + "count=50.0,rate=1.6666666,share=0.5 "
+                        + timestampNs)
         );
         assertThat(
                 strArray[7],
                 startsWith("network,execution=2-2-2-2,operation=get/api/v1/test,target=service2 "
-                        + "avg=5050.0,max=10000.0,min=100.0,p50=5100.0,p95=9600.0,p99=10000.0,rate=16833.334 ")
+                        + "avg=5050.0,max=10000.0,min=100.0,p50=5100.0,p95=9600.0,p99=10000.0,rate=16833.334 "
+                        + timestampNs)
         );
     }
 
