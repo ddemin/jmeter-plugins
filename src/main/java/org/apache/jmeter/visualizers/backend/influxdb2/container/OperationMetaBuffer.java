@@ -40,4 +40,13 @@ public class OperationMetaBuffer {
                 );
     }
 
+    public void clear() {
+        buffer.forEach(
+                (samplerName, metaMap) ->
+                        metaMap.forEach(
+                                (type, listOfMeta) -> listOfMeta.clear()
+                        )
+        );
+    }
+
 }

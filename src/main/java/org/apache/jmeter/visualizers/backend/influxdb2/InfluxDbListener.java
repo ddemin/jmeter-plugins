@@ -5,6 +5,7 @@ import org.apache.jmeter.samplers.SampleResult;
 import org.apache.jmeter.threads.JMeterContextService;
 import org.apache.jmeter.visualizers.backend.BackendListenerClient;
 import org.apache.jmeter.visualizers.backend.BackendListenerContext;
+import org.apache.jmeter.visualizers.backend.influxdb2.container.OperationErrorsBuffer;
 import org.apache.jmeter.visualizers.backend.influxdb2.container.OperationMetaBuffer;
 import org.apache.jmeter.visualizers.backend.influxdb2.container.OperationStatisticBuffer;
 import org.apache.jmeter.visualizers.backend.influxdb2.influx.InfluxDbHttpClient;
@@ -26,6 +27,7 @@ public class InfluxDbListener implements BackendListenerClient {
     private InfluxDbService influxService;
     private InfluxDbServiceScheduledTrigger influxScheduledTrigger;
     private OperationStatisticBuffer operationsStatisticBuffer;
+    private OperationErrorsBuffer operationsErrorsBuffer;
     private OperationMetaBuffer operationsMetaBuffer;
     private Pattern samplersFilteringPattern;
     private String componentsVersion = "";
@@ -45,6 +47,7 @@ public class InfluxDbListener implements BackendListenerClient {
                 .forEach(
                         result -> {
                             operationsStatisticBuffer.putMetric(result);
+                            operationsErrorsBuffer.putMetric(result);
                         }
                 );
     }
@@ -87,6 +90,7 @@ public class InfluxDbListener implements BackendListenerClient {
         );
 
         this.operationsStatisticBuffer = new OperationStatisticBuffer();
+        this.operationsErrorsBuffer = new OperationErrorsBuffer();
         this.operationsMetaBuffer = new OperationMetaBuffer();
         Map<String, Object> allowedVariablesForTestMetadata = filterJmeterVariables(arguments);
 
@@ -94,6 +98,7 @@ public class InfluxDbListener implements BackendListenerClient {
                 influxHttpClient,
                 converter,
                 this.operationsStatisticBuffer,
+                this.operationsErrorsBuffer,
                 this.operationsMetaBuffer,
                 arguments.getInfluxDbBucketTestMeta(),
                 arguments.getInfluxDbBucketOperationStats(),

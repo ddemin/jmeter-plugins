@@ -2,6 +2,7 @@ package org.apache.jmeter.visualizers.backend.influxdb2.influx;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.threads.JMeterContextService;
+import org.apache.jmeter.visualizers.backend.influxdb2.container.OperationErrorsBuffer;
 import org.apache.jmeter.visualizers.backend.influxdb2.container.OperationMetaBuffer;
 import org.apache.jmeter.visualizers.backend.influxdb2.lineprotocol.LineProtocolBuilder;
 import org.apache.jmeter.visualizers.backend.influxdb2.lineprotocol.LineProtocolConverter;
@@ -27,6 +28,7 @@ public class InfluxDbService {
 
     private final Set<String> labelsThatReported = Collections.synchronizedSet(new HashSet<>());
     private final OperationStatisticBuffer statisticBuffer;
+    private final OperationErrorsBuffer errorsBuffer;
     private final OperationMetaBuffer metaBuffer;
     private final InfluxDbHttpClient influxClient;
     private final LineProtocolConverter converter;
@@ -43,6 +45,7 @@ public class InfluxDbService {
             InfluxDbHttpClient httpClient,
             LineProtocolConverter converter,
             OperationStatisticBuffer statisticBuffer,
+            OperationErrorsBuffer errorsBuffer,
             OperationMetaBuffer metaBuffer,
             String bucketTestMeta,
             String bucketOperationStats,
@@ -50,6 +53,7 @@ public class InfluxDbService {
             Map<String, Object> additionalTestMetadataVariables
     ) {
         this.statisticBuffer = statisticBuffer;
+        this.errorsBuffer = errorsBuffer;
         this.metaBuffer = metaBuffer;
         this.converter = converter;
         this.influxClient = httpClient;
@@ -84,9 +88,9 @@ public class InfluxDbService {
             LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage(), tr);
         }
 
-        this.statisticBuffer.getStatisticBuffer().clear();
-        this.statisticBuffer.getErrorMessagesBuffer().clear();
-        this.metaBuffer.getBuffer().clear();
+        this.statisticBuffer.clear();
+        this.errorsBuffer.clear();
+        this.metaBuffer.clear();
         this.labelsThatReported.clear();
         this.componentsVersion = null;
         this.areVersionsSent = false;
@@ -191,12 +195,12 @@ public class InfluxDbService {
 
     void packAndSendOperationsStatistic(long timestampNs) {
         LineProtocolBuilder lineProtocolBuilderStats;
-        synchronized (statisticBuffer.getStatisticBuffer()) {
+        synchronized (statisticBuffer.getBuffer()) {
             lineProtocolBuilderStats = converter.createBuilderForOperationsStatistic(
-                    statisticBuffer.getStatisticBuffer(),
+                    statisticBuffer.getBuffer(),
                     timestampNs
             );
-            statisticBuffer.getStatisticBuffer().clear();
+            this.statisticBuffer.clear();
         }
 
         if (lineProtocolBuilderStats.getRows() > 0) {
@@ -211,16 +215,16 @@ public class InfluxDbService {
                     metaBuffer.getBuffer(),
                     timestampNs
             );
-            metaBuffer.getBuffer().clear();
+            this.metaBuffer.clear();
         }
 
-        synchronized (statisticBuffer.getErrorMessagesBuffer()) {
+        synchronized (errorsBuffer.getBuffer()) {
             converter.enrichWithOperationsErrorsMetadata(
                     lineProtocolBuilderMeta,
-                    statisticBuffer.getErrorMessagesBuffer(),
+                    errorsBuffer.getBuffer(),
                     timestampNs
             );
-            statisticBuffer.getErrorMessagesBuffer().clear();
+            this.errorsBuffer.clear();
         }
 
         if (lineProtocolBuilderMeta.getRows() > 0) {

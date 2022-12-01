@@ -39,44 +39,44 @@ class OperationStatisticBufferTest {
         buffer.putMetric(someSample2);
 
         assertThat(
-                buffer.getStatisticBuffer(),
+                buffer.getBuffer(),
                 aMapWithSize(2)
         );
         assertThat(
-                buffer.getStatisticBuffer().get(label1),
+                buffer.getBuffer().get(label1),
                 aMapWithSize(4)
         );
         assertThat(
-                buffer.getStatisticBuffer().get(label1).get(LATENCY).getAverage(),
+                buffer.getBuffer().get(label1).get(LATENCY).getAverage(),
                 Is.is(1234.0f)
         );
         assertThat(
-                buffer.getStatisticBuffer().get(label1).get(ERROR).getSum(),
+                buffer.getBuffer().get(label1).get(ERROR).getSum(),
                 Is.is(10L)
         );
         assertThat(
-                buffer.getStatisticBuffer().get(label1).get(NETWORK).getSum(),
+                buffer.getBuffer().get(label1).get(NETWORK).getSum(),
                 Is.is(4000L)
         );
         assertThat(
-                buffer.getStatisticBuffer().get(label1).get(LOAD).getSum(),
+                buffer.getBuffer().get(label1).get(LOAD).getSum(),
                 Is.is(20L)
         );
 
         assertThat(
-                buffer.getStatisticBuffer().get(label2).get(LATENCY).getAverage(),
+                buffer.getBuffer().get(label2).get(LATENCY).getAverage(),
                 Is.is(2345.0f)
         );
         assertThat(
-                buffer.getStatisticBuffer().get(label2).get(ERROR).getMin(),
+                buffer.getBuffer().get(label2).get(ERROR).getMin(),
                 Is.is(5L)
         );
         assertThat(
-                buffer.getStatisticBuffer().get(label2).get(NETWORK).getSum(),
+                buffer.getBuffer().get(label2).get(NETWORK).getSum(),
                 Is.is(4000L)
         );
         assertThat(
-                buffer.getStatisticBuffer().get(label2).get(LOAD).getSum(),
+                buffer.getBuffer().get(label2).get(LOAD).getSum(),
                 Is.is(20L)
         );
     }
@@ -92,18 +92,18 @@ class OperationStatisticBufferTest {
         buffer.putMetric(someSample);
 
         assertThat(
-                buffer.getStatisticBuffer(),
+                buffer.getBuffer(),
                 aMapWithSize(1)
         );
 
-        buffer.getStatisticBuffer().clear();
+        buffer.getBuffer().clear();
         assertThat(
-                buffer.getStatisticBuffer(),
+                buffer.getBuffer(),
                 aMapWithSize(0)
         );
-        buffer.getErrorMessagesBuffer().clear();
+        buffer.clear();
         assertThat(
-                buffer.getErrorMessagesBuffer(),
+                buffer.getBuffer(),
                 aMapWithSize(0)
         );
     }

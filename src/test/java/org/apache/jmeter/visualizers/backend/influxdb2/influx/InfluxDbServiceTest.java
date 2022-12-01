@@ -4,6 +4,7 @@ import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
 import org.apache.jmeter.samplers.SampleResult;
 import org.apache.jmeter.samplers.StatisticalSampleResult;
+import org.apache.jmeter.visualizers.backend.influxdb2.container.OperationErrorsBuffer;
 import org.apache.jmeter.visualizers.backend.influxdb2.container.OperationMetaBuffer;
 import org.apache.jmeter.visualizers.backend.influxdb2.container.OperationStatisticBuffer;
 import org.apache.jmeter.visualizers.backend.influxdb2.lineprotocol.LineProtocolConverter;
@@ -28,6 +29,7 @@ class InfluxDbServiceTest {
     InfluxDbService influxDbService;
     OperationStatisticBuffer statisticBuffer;
     OperationMetaBuffer metaBuffer;
+    private OperationErrorsBuffer errorsBuffer;
 
     @BeforeEach
     void setup() throws MalformedURLException, URISyntaxException {
@@ -38,7 +40,7 @@ class InfluxDbServiceTest {
         );
 
         statisticBuffer = new OperationStatisticBuffer();
-
+        errorsBuffer = new OperationErrorsBuffer();
         metaBuffer = new OperationMetaBuffer();
 
         influxDbService = new InfluxDbService(
@@ -56,6 +58,7 @@ class InfluxDbServiceTest {
                         5
                 ),
                 statisticBuffer,
+                errorsBuffer,
                 metaBuffer,
                 "testMeta",
                 "operationStats",
@@ -190,6 +193,7 @@ class InfluxDbServiceTest {
         withDigitCode.setSuccessful(false);
         withDigitCode.setResponseCode("504");
         statisticBuffer.putMetric(withDigitCode);
+        errorsBuffer.putMetric(withDigitCode);
 
         SampleResult withDigitCode2 = new SampleResult(System.currentTimeMillis(), 1234L);
         String labelWithDigitCode2 = "service1: operation1";
@@ -197,6 +201,7 @@ class InfluxDbServiceTest {
         withDigitCode2.setSuccessful(false);
         withDigitCode2.setResponseCode("504");
         statisticBuffer.putMetric(withDigitCode2);
+        errorsBuffer.putMetric(withDigitCode);
 
         SampleResult sample = new SampleResult(System.currentTimeMillis(), 1234L);
         String label = "service1: operation1";
@@ -214,6 +219,8 @@ class InfluxDbServiceTest {
 
         statisticBuffer.putMetric(someSample);
         statisticBuffer.putMetric(someSample);
+        errorsBuffer.putMetric(someSample);
+        errorsBuffer.putMetric(someSample);
 
         StatisticalSampleResult someSample2 = new StatisticalSampleResult(System.currentTimeMillis(), 2345L);
         String label2 = "service2: operation2";
@@ -224,6 +231,7 @@ class InfluxDbServiceTest {
         someSample2.setBytes(2000);
         someSample2.setSentBytes(2000);
         statisticBuffer.putMetric(someSample2);
+        errorsBuffer.putMetric(someSample2);
     }
 
     private void verifyCountOfWriteRequests(int count, String bucket) {

@@ -13,6 +13,10 @@ public class StatisticCounter {
     private long samples = Long.MIN_VALUE;
     private long sum = 0;
 
+    public StatisticCounter() {
+        clear();
+    }
+
     public synchronized void add(long newItem, long samples) {
         add(newItem);
         addSamples(samples);
@@ -27,6 +31,14 @@ public class StatisticCounter {
         sum += newItem;
         isSorted = false;
         data[size++] = newItem;
+    }
+
+    public synchronized void clear() {
+        data = new long[PREALLOCATED_VALUES_DEFAULT];
+        isSorted = false;
+        size = 0;
+        samples = Long.MIN_VALUE;
+        sum = 0;
     }
 
     public long getSamples() {
@@ -58,15 +70,6 @@ public class StatisticCounter {
         assertStorageIsNotEmpty();
         sortStorageIfNot();
         return data[(int) Math.floor((level / 100.0) * size)];
-    }
-
-    // TODO Think about how to use it
-    public void clear() {
-        data = new long[PREALLOCATED_VALUES_DEFAULT];
-        isSorted = false;
-        sum = 0;
-        size = 0;
-        samples = Long.MIN_VALUE;
     }
 
     private void addSamples(long samples) {
