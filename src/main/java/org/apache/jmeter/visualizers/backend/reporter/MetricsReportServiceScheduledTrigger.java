@@ -30,6 +30,7 @@ public class MetricsReportServiceScheduledTrigger implements Runnable {
         reporterService.collectOperationsLabels();
 
         long timestampNs = toNsPrecision(System.currentTimeMillis());
+        reporterService.collectAndTags(timestampNs);
         reporterService.collectAndSendVersions(timestampNs);
 
         reporterService.sendOperationsMetrics(timestampNs);

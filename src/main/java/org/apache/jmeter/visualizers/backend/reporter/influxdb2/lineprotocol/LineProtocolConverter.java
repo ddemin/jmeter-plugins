@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.apache.jmeter.visualizers.backend.reporter.util.Utils.*;
 
@@ -32,14 +33,14 @@ public class LineProtocolConverter {
     private final String profile;
     private final String details;
     private final String testname;
-    private final Map<String, String> userLabels;
+    private final Map<String, Object> userLabels;
     private final Integer warmupInterval;
     private final Integer batchingPeriod;
 
     public LineProtocolConverter(String testUuid, String executionUuid,
                                  String hostname, String environment,
                                  String profile, String details, String testname,
-                                 Map<String, String> userLabels,
+                                 Map<String, Object> userLabels,
                                  int warmupInterval, int batchingPeriod) {
         this.testUuid = testUuid;
         this.executionUuid = executionUuid;
@@ -55,43 +56,27 @@ public class LineProtocolConverter {
 
     public LineProtocolBuilder createBuilderForTestMetadata(
             boolean isItStarted,
-            Map<String, Object> additionalVariables,
+            Map<String, Object> additionalJmeterVariables,
             long timestampNs
     ) {
         LineProtocolBuilder protocolBuilder = LineProtocolBuilder.withFirstRow(
                 "execution",
-                buildTestEventTags(isItStarted),
-                List.of(new AbstractMap.SimpleEntry<>("uuid", executionUuid)),
+                buildTestMetaTags(),
+                List.of(new AbstractMap.SimpleEntry<>("is_it_started", isItStarted)),
                 timestampNs
         );
 
         if (isItStarted) {
             final Map<String, String> tags = buildTestMetaTags();
 
-            final ArrayList<Map.Entry<String, String>> labelFields = new ArrayList<>();
-            labelFields.add(new AbstractMap.SimpleEntry<>("details", details));
-            labelFields.add(new AbstractMap.SimpleEntry<>("name", testname));
-            labelFields.add(new AbstractMap.SimpleEntry<>("profile", profile));
+            final Map<String, Object> labelFields = new TreeMap<>();
+            labelFields.put("name", testname);
+            labelFields.put("details", details);
+            labelFields.put("warmup_sec", warmupInterval);
+            labelFields.put("period_sec", batchingPeriod);
 
-            userLabels.entrySet().forEach(
-                    e -> labelFields.add(
-                            StringUtils.isEmpty(e.getValue()) ? new AbstractMap.SimpleEntry<>(e.getKey(), UNDEFINED) : e
-                    )
-            );
-
-            protocolBuilder.appendRowWithTextFields(
-                    "label",
-                    tags,
-                    labelFields,
-                    timestampNs
-            );
-
-            final ArrayList<Map.Entry<String, Object>> variableFields = new ArrayList<>();
-            variableFields.add(new AbstractMap.SimpleEntry<>("warmup_sec", warmupInterval));
-            variableFields.add(new AbstractMap.SimpleEntry<>("period_sec", batchingPeriod));
-
-            if (additionalVariables != null) {
-                additionalVariables.entrySet()
+            if (additionalJmeterVariables != null) {
+                additionalJmeterVariables.entrySet()
                         .stream()
                         .map(
                                 e ->
@@ -105,13 +90,35 @@ public class LineProtocolConverter {
                                                 ? new AbstractMap.SimpleEntry<>(e.getKey(), (Object) UNDEFINED)
                                                 : new AbstractMap.SimpleEntry<>(e.getKey().toLowerCase(), e.getValue())
                         )
-                        .forEach(variableFields::add);
+                        .forEach(entry -> labelFields.put(entry.getKey(), entry.getValue()));
             }
 
+            userLabels.forEach(
+                    (key, value) -> {
+                        if (StringUtils.isEmpty(value.toString())) {
+                            labelFields.put(key, UNDEFINED);
+                        } else {
+                            labelFields.put(key, value);
+                        }
+                    }
+            );
+
             protocolBuilder.appendRow(
-                    "variable",
+                    "label",
                     tags,
-                    variableFields,
+                    labelFields.entrySet().stream().toList(),
+                    timestampNs
+            );
+
+            final Map<String, String> environmentFields = new TreeMap<>();
+            environmentFields.put("name", environment);
+            environmentFields.put("profile", profile);
+            environmentFields.put("host", hostname);
+
+            protocolBuilder.appendRowWithTextFields(
+                    "environment",
+                    tags,
+                    environmentFields.entrySet().stream().toList(),
                     timestampNs
             );
         }
@@ -119,33 +126,12 @@ public class LineProtocolConverter {
         return protocolBuilder;
     }
 
-    public LineProtocolBuilder createBuilderForVersions(String versions, long timestampNs) {
-        List<Map.Entry<String, Object>> versionsByComponent = toMapWithLowerCaseKey(versions)
-                .entrySet()
-                .stream()
-                .map(
-                        entry -> {
-                            if (StringUtils.isEmpty(entry.getKey().trim()) || StringUtils.isEmpty(entry.getValue().trim())) {
-                                LOG.error("Incorrect component-version row: " + entry);
-                                return null;
-                            } else {
-                                return (Map.Entry<String, Object>) new AbstractMap.SimpleEntry<String, Object>(
-                                        entry.getKey().toLowerCase(),
-                                        entry.getValue().trim()
-                                );
-                            }
-                        }
-                )
-                .filter(Objects::nonNull)
-                .sorted(Map.Entry.comparingByKey())
-                .toList();
+    public LineProtocolBuilder createBuilderForTags(String tags, long timestampNs) {
+        return createBuilderForDelimitedItems("label", "tags", tags, timestampNs);
+    }
 
-        return LineProtocolBuilder.withFirstRow(
-                "version",
-                buildTestMetaTags(),
-                versionsByComponent,
-                timestampNs
-        );
+    public LineProtocolBuilder createBuilderForVersions(String versions, long timestampNs) {
+        return createBuilderForKeyValueString("version", versions, timestampNs);
     }
 
     public LineProtocolBuilder createBuilderForOperationsStatistic(
@@ -202,7 +188,7 @@ public class LineProtocolConverter {
     }
 
     public LineProtocolBuilder createBuilderForOperationsMetadata(
-            Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> metaByMetricName,
+            Map<String, Map<MetaTypeEnum, List<Map.Entry<String, Object>>>> metaByMetricName,
             long timestampNs
     ) {
         LineProtocolBuilder lpBuilder = new LineProtocolBuilder();
@@ -216,7 +202,7 @@ public class LineProtocolConverter {
                                         .appendTags(tags)
                                         .appendLineProtocolField(
                                                 entry.getKey(),
-                                                StringUtils.isEmpty(entry.getValue()) ? UNDEFINED : entry.getValue()
+                                                StringUtils.isEmpty(String.valueOf(entry.getValue())) ? UNDEFINED : entry.getValue()
                                         )
                                         .appendLineProtocolTimestampNs(timestampNs)
                 );
@@ -247,20 +233,13 @@ public class LineProtocolConverter {
         return lpBuilder;
     }
 
-
-    Map<String, String> buildTestEventTags(boolean isItStart) {
+    Map<String, String> buildTestMetaTags() {
         return new TreeMap<>(
                 Map.of(
-                        "environment", environment,
-                        "hostname", hostname,
-                        "is_it_start", String.valueOf(isItStart),
-                        "test", testUuid
+                        "uuid", executionUuid,
+                        "test_uuid", testUuid
                 )
         );
-    }
-
-    Map<String, String> buildTestMetaTags() {
-        return Map.of("test", testUuid);
     }
 
     Map<String, String> parseSamplerNameToTags(String sampleLabel) {
@@ -290,6 +269,52 @@ public class LineProtocolConverter {
                         "target", targetService,
                         "operation", operation
                 )
+        );
+    }
+
+    LineProtocolBuilder createBuilderForDelimitedItems(
+            String measurement, String fieldName, String delimitedItems, long timestampNs
+    ) {
+        String formattedFieldValue = toListWithLowerCase(delimitedItems)
+                .stream()
+                .sorted()
+                .collect(Collectors.joining(","));
+
+        return LineProtocolBuilder.withFirstRow(
+                measurement,
+                buildTestMetaTags(),
+                List.of(new AbstractMap.SimpleEntry<>(fieldName, formattedFieldValue)),
+                timestampNs
+        );
+    }
+
+    LineProtocolBuilder createBuilderForKeyValueString(String measurement, String mapAsString, long timestampNs) {
+        List<Map.Entry<String, Object>> valuesByKeys = toMapWithLowerCaseKey(mapAsString)
+                .entrySet()
+                .stream()
+                .map(
+                        entry -> {
+                            String valueAsStr = String.valueOf(entry.getValue());
+                            if (StringUtils.isEmpty(entry.getKey().trim()) || StringUtils.isEmpty(valueAsStr.trim())) {
+                                LOG.error("Incorrect key-value row: " + entry);
+                                return null;
+                            } else {
+                                return (Map.Entry<String, Object>) new AbstractMap.SimpleEntry<String, Object>(
+                                        entry.getKey().toLowerCase(),
+                                        valueAsStr.trim()
+                                );
+                            }
+                        }
+                )
+                .filter(Objects::nonNull)
+                .sorted(Map.Entry.comparingByKey())
+                .toList();
+
+        return LineProtocolBuilder.withFirstRow(
+                measurement,
+                buildTestMetaTags(),
+                valuesByKeys,
+                timestampNs
         );
     }
 

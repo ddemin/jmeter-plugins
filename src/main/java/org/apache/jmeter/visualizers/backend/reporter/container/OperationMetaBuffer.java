@@ -13,10 +13,10 @@ public class OperationMetaBuffer {
 
     private static final Logger LOG = LoggerFactory.getLogger(OperationMetaBuffer.class);
 
-    private final Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> buffer
+    private final Map<String, Map<MetaTypeEnum, List<Map.Entry<String, Object>>>> buffer
             = Collections.synchronizedMap(new HashMap<>());
 
-    public Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> getBuffer() {
+    public Map<String, Map<MetaTypeEnum, List<Map.Entry<String, Object>>>> getBuffer() {
         return buffer;
     }
 
@@ -32,7 +32,7 @@ public class OperationMetaBuffer {
         putLabelsMeta(sampleResult.getSampleLabel(), labels);
     }
 
-    Map<MetaTypeEnum, List<Map.Entry<String, String>>> getResultBucket(String sampleName) {
+    Map<MetaTypeEnum, List<Map.Entry<String, Object>>> getResultBucket(String sampleName) {
         return buffer
                 .computeIfAbsent(
                         sampleName,

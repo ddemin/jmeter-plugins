@@ -97,10 +97,24 @@ class InfluxDbServiceTest {
                 getPatternForWriteRequestToBucket("testMeta")
                         .withRequestBody(
                                 matching(
-                                        "execution,environment=env1,hostname=host1,is_it_start=true,test=1-1-1-1 uuid=\"2-2-2-2\" [0-9]+\\n"
-                                                + "label,test=1-1-1-1 details=\"some details\",name=\"some name\",profile=\"profile1\",user-label1=\"value1\",user-label2=\"value2\" [0-9]+\\n"
-                                                + "variable,test=1-1-1-1 warmup_sec=60i,period_sec=5i,variable_1=\"value 1\",variable_2=\"value 2\" [0-9]+\\n"
+                                        "execution,test_uuid=1-1-1-1,uuid=2-2-2-2 is_it_started=true [0-9]+\\n"
+                                                + "label,test_uuid=1-1-1-1,uuid=2-2-2-2 details=\"some details\",name=\"some name\",period_sec=5i,user-label1=\"value1\",user-label2=\"value2\",variable_1=\"value 1\",variable_2=\"value 2\",warmup_sec=60i [0-9]+\\n"
+                                                + "environment,test_uuid=1-1-1-1,uuid=2-2-2-2 host=\"host1\",name=\"env1\",profile=\"profile1\" [0-9]+\\n"
                                 )
+                        )
+        );
+    }
+
+    @Test
+    void sendTags() {
+        influxDbService.sendTags(
+                " tag1,,tag3   ,TaG4", toNsPrecision(System.currentTimeMillis())
+        );
+
+        verify(
+                getPatternForWriteRequestToBucket("testMeta")
+                        .withRequestBody(
+                                matching("label,test_uuid=1-1-1-1,uuid=2-2-2-2 tags=\"tag1,tag3,tag4\" [0-9]+\\n")
                         )
         );
     }
@@ -114,7 +128,7 @@ class InfluxDbServiceTest {
         verify(
                 getPatternForWriteRequestToBucket("testMeta")
                         .withRequestBody(
-                                matching("version,test=1-1-1-1 service1=\"ver123\",service2=\"234\" [0-9]+\\n")
+                                matching("version,test_uuid=1-1-1-1,uuid=2-2-2-2 service1=\"ver123\",service2=\"234\" [0-9]+\\n")
                         )
         );
     }
@@ -144,7 +158,7 @@ class InfluxDbServiceTest {
                 getPatternForWriteRequestToBucket("testMeta")
                         .withRequestBody(
                                 matching(
-                                        "execution,environment=env1,hostname=host1,is_it_start=false,test=1-1-1-1 uuid=\"2-2-2-2\" [0-9]+\\n"
+                                        "execution,test_uuid=1-1-1-1,uuid=2-2-2-2 is_it_started=false [0-9]+\\n"
                                 )
                         )
         );

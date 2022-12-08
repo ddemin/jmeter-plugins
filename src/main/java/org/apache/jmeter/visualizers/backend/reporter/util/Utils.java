@@ -6,10 +6,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.AbstractMap;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class Utils {
@@ -25,12 +22,12 @@ public class Utils {
     }
 
     @NotNull
-    public static Map<String, String> toMapWithLowerCaseKey(String text) {
+    public static Map<String, Object> toMapWithLowerCaseKey(String text) {
         return toMapWithLowerCaseKey(text, DELIMITER_LIST_ITEM, DELIMITER_KEY_VALUE);
     }
 
     @NotNull
-    public static Map<String, String> toMapWithLowerCaseKey(
+    public static Map<String, Object> toMapWithLowerCaseKey(
             String text,
             String itemsDelimiter,
             String keyValueDelimiter
@@ -61,5 +58,23 @@ public class Utils {
                 )
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @NotNull
+    public static List<String> toListWithLowerCase(String text) {
+        return toListWithLowerCase(text, DELIMITER_LIST_ITEM);
+    }
+
+    @NotNull
+    public static List<String> toListWithLowerCase(
+            String text,
+            String itemsDelimiter
+    ) {
+        return Arrays
+                .stream(text.trim().split(itemsDelimiter))
+                .filter(StringUtils::isNoneEmpty)
+                .map(cv -> cv.trim().toLowerCase())
+                .filter(StringUtils::isNoneEmpty)
+                .collect(Collectors.toList());
     }
 }

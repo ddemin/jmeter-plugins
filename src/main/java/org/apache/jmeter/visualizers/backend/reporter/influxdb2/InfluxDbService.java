@@ -58,6 +58,12 @@ public class InfluxDbService extends AbstractMetricsReportService {
         influxClient.processRetryQueue();
     }
 
+    public void sendTags(String tags, long timestampNs) {
+        LOG.info("Send test tags");
+        LineProtocolBuilder builder = converter.createBuilderForTags(tags, timestampNs);
+        send(bucketTestMeta, builder.build());
+    }
+
     public void sendVersions(String versions, long timestampNs) {
         LOG.info("Send versions metadata");
         LineProtocolBuilder builder = converter.createBuilderForVersions(versions, timestampNs);

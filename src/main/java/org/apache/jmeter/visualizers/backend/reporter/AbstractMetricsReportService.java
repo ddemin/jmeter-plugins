@@ -19,6 +19,7 @@ public abstract class AbstractMetricsReportService {
     private static final Logger LOG = LoggerFactory.getLogger(AbstractMetricsReportService.class);
 
     private static final int PAUSE_BEFORE_LAST_BATCH_MS = 10_000;
+    private static final String TAGS_PROPERTY_NAME = "jmeter.test.tags";
     private static final String VERSIONS_PROPERTY_NAME = "jmeter.components.versions";
     private static final String OPERATIONS_LABELS_PROPERTY = "jmeter.operations.labels";
     private static final String DELIMITER_SAMPLERS_LABELS_KV = "=";
@@ -32,7 +33,9 @@ public abstract class AbstractMetricsReportService {
 
     private int samplersLabelsHash;
     private String componentsVersion;
+    private String testTags;
     private boolean areVersionsSent;
+    private boolean areTagsSent;
 
     public abstract void retryFailedRequests();
     protected abstract void sendStartEventAndMetadata(
@@ -43,6 +46,7 @@ public abstract class AbstractMetricsReportService {
             long timestampNs, OperationMetaBuffer buffer, OperationErrorsBuffer errorsBuffer
     );
     protected abstract void packAndSendOperationsStatistic(long timestampNs, OperationStatisticBuffer buffer);
+    protected abstract void sendTags(String testTags, long timestampNs);
     protected abstract void sendVersions(String componentsVersion, long timestampNs);
 
     public AbstractMetricsReportService(
@@ -103,13 +107,13 @@ public abstract class AbstractMetricsReportService {
         if (samplersLabels != null && samplersLabelsHash != samplersLabels.hashCode()) {
             samplersLabelsHash = samplersLabels.hashCode();
 
-            Map<String, String> labelsMap = toMapWithLowerCaseKey(
+            Map<String, Object> labelsMap = toMapWithLowerCaseKey(
                     samplersLabels, DELIMITER_SAMPLERS_LABELS_ITEMS, DELIMITER_SAMPLERS_LABELS_KV
             );
             labelsMap.forEach((key, value) -> {
                 if (!labelsThatReported.contains(key)) {
                     labelsThatReported.add(key);
-                    metaBuffer.putLabelsMeta(key, value);
+                    metaBuffer.putLabelsMeta(key, String.valueOf(value));
                 }
             });
         }
@@ -126,6 +130,17 @@ public abstract class AbstractMetricsReportService {
         }
     }
 
+    void collectAndTags(long timestampNs) {
+        if (!areTagsSent && isTestTagsDefined()) {
+            LOG.info(
+                    "Property '" + TAGS_PROPERTY_NAME + "' with test tags was detected. Send tags: "
+                            + testTags
+            );
+            sendTags(testTags, timestampNs);
+            areTagsSent = true;
+        }
+    }
+
     void collectAndSendVersions(long timestampNs) {
         if (!areVersionsSent && isComponentsVersionsDefined()) {
             LOG.info(
@@ -137,6 +152,16 @@ public abstract class AbstractMetricsReportService {
         }
     }
 
+    private boolean isTestTagsDefined() {
+        try {
+            testTags = JMeterContextService.getContext().getProperties().getProperty(TAGS_PROPERTY_NAME, "");
+        } catch (NullPointerException ex) {
+            LOG.error(ex.getMessage(), ex);
+            return false;
+        }
+        return StringUtils.isNotEmpty(testTags) && testTags.contains(DELIMITER_LIST_ITEM);
+    }
+
     private boolean isComponentsVersionsDefined() {
         try {
             componentsVersion = JMeterContextService.getContext().getProperties().getProperty(VERSIONS_PROPERTY_NAME, "");
@@ -146,4 +171,5 @@ public abstract class AbstractMetricsReportService {
         }
         return StringUtils.isNotEmpty(componentsVersion) && componentsVersion.contains(DELIMITER_KEY_VALUE);
     }
+
 }

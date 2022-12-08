@@ -59,7 +59,7 @@ public class AbstractListenerArguments extends Arguments {
     private final String testname;
     private final String loadprofile;
     private final String details;
-    private final Map<String, String> additionalLabels;
+    private final Map<String, Object> additionalLabels;
     private final Pattern samplersRegex;
     private final Pattern variablesRegex;
     private final int batchingPeriod;
@@ -112,7 +112,7 @@ public class AbstractListenerArguments extends Arguments {
         return this.details;
     }
 
-    public Map<String, String> getTestAdditionalLabels() {
+    public Map<String, Object> getTestAdditionalLabels() {
         return this.additionalLabels;
     }
 

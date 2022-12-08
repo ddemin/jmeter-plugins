@@ -19,7 +19,7 @@ class LineProtocolConverterTest {
 
     LineProtocolConverter converter;
     Map<String, Object> additionalVars;
-    Map<String, String> additionalLabels;
+    Map<String, Object> additionalLabels;
 
     @BeforeEach
     void setup() {
@@ -53,18 +53,19 @@ class LineProtocolConverterTest {
 
         assertThat(
                 strArray[0],
-                startsWith("execution,environment=env1,hostname=host1,is_it_start=true,test=1-1-1-1 uuid=\"2-2-2-2\" ")
+                startsWith("execution,test_uuid=1-1-1-1,uuid=2-2-2-2 is_it_started=true ")
         );
         assertThat(
                 strArray[1],
-                startsWith("label,test=1-1-1-1"
-                        + " details=\"some environment and execution details\",name=\"test name\",profile=\"profile1\","
-                        + "label11=\"undefined\",label22=\"value 22\" ")
+                startsWith("label,test_uuid=1-1-1-1,uuid=2-2-2-2 "
+                        + "details=\"some environment and execution details\","
+                        + "label11=\"undefined\",label22=\"value 22\",name=\"test name\","
+                        + "period_sec=30i,var1=\"undefined\",var2=123i,var3=\"undefined\",warmup_sec=60i ")
         );
         assertThat(
                 strArray[2],
-                startsWith("variable,test=1-1-1-1"
-                        + " warmup_sec=60i,period_sec=30i,var1=\"undefined\",var2=123i,var3=\"undefined\" ")
+                startsWith("environment,test_uuid=1-1-1-1,uuid=2-2-2-2 "
+                        + "host=\"host1\",name=\"env1\",profile=\"profile1\" ")
         );
     }
 
@@ -80,7 +81,7 @@ class LineProtocolConverterTest {
 
         assertThat(
                 strArray[0],
-                startsWith("execution,environment=env1,hostname=host1,is_it_start=false,test=1-1-1-1 uuid=\"2-2-2-2\" ")
+                startsWith("execution,test_uuid=1-1-1-1,uuid=2-2-2-2 is_it_started=false ")
         );
     }
 
@@ -95,13 +96,13 @@ class LineProtocolConverterTest {
 
         assertThat(
                 strArray[0],
-                startsWith("version,test=1-1-1-1 service\\ 1=\"version 1.2.3\",service\\ 2\\ a\\ b\\ c=\"version 5\" ")
+                startsWith("version,test_uuid=1-1-1-1,uuid=2-2-2-2 service\\ 1=\"version 1.2.3\",service\\ 2\\ a\\ b\\ c=\"version 5\" ")
         );
     }
 
     @Test
     void lpStringForOperationsMetadata() {
-        Map<String, Map<MetaTypeEnum, List<Map.Entry<String, String>>>> metaMap = new TreeMap<>();
+        Map<String, Map<MetaTypeEnum, List<Map.Entry<String, Object>>>> metaMap = new TreeMap<>();
         metaMap.put(
                 " Service1 : GET/api/v1/test ",
                 new TreeMap<>(

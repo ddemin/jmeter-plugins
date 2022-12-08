@@ -22,7 +22,7 @@ class UtilsTest {
     @Test
     public void parseStringToMap() {
         String mapAsString = "test1:vALUe1  , TeST2 :  value2,,teST3";
-        Map<String, String> actualMap = Utils.toMapWithLowerCaseKey(mapAsString);
+        Map<String, Object> actualMap = Utils.toMapWithLowerCaseKey(mapAsString);
 
         assertThat(
                 actualMap,
