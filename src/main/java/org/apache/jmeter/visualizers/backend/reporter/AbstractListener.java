@@ -43,6 +43,7 @@ public abstract class AbstractListener<T extends AbstractListenerArguments> impl
         this.samplersWhitelistCache.clear();
 
         this.influxScheduledTrigger = new MetricsReportServiceScheduledTrigger(
+                arguments.isItPrimary(),
                 setupMetricsReporterService(arguments),
                 arguments.getBatchingPeriod()
         );

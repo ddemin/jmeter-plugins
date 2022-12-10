@@ -1,5 +1,6 @@
 package org.apache.jmeter.visualizers.backend.reporter.container;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.samplers.SampleResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,7 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.apache.jmeter.visualizers.backend.reporter.util.Utils.toMapWithLowerCaseKey;
+import static org.apache.jmeter.visualizers.backend.reporter.util.Utils.*;
 
 public class OperationMetaBuffer {
 
@@ -24,7 +25,22 @@ public class OperationMetaBuffer {
         getResultBucket(sampleName)
                 .computeIfAbsent(MetaTypeEnum.LABEL, k -> Collections.synchronizedList(new ArrayList<>()))
                 .addAll(
-                        toMapWithLowerCaseKey(labels).entrySet().stream().toList()
+                        toMapWithLowerCaseKey(labels).entrySet().stream()
+                                .map(entry -> {
+                                    if (entry.getKey().equalsIgnoreCase("tags")) {
+                                        String tagsValue = String.valueOf(entry.getValue());
+                                        entry.setValue(
+                                                StringUtils.isEmpty(tagsValue)
+                                                        ? ""
+                                                        : tagsValue
+                                                        .trim()
+                                                        .toLowerCase()
+                                                        .replace("|", ",")
+                                        );
+                                    }
+                                    return entry;
+                                })
+                                .toList()
                 );
     }
 

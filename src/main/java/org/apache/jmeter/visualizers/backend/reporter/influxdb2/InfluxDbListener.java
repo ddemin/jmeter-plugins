@@ -24,7 +24,6 @@ public class InfluxDbListener extends AbstractListener<InfluxDbListenerArguments
         LineProtocolConverter converter = new LineProtocolConverter(
                 arguments.getTestId(),
                 arguments.getExecutionId(),
-                arguments.getHostname(),
                 arguments.getEnvironment(),
                 arguments.getTestLoadProfile(),
                 arguments.getTestDetails(),
@@ -41,6 +40,7 @@ public class InfluxDbListener extends AbstractListener<InfluxDbListenerArguments
         );
 
         return new InfluxDbService(
+                arguments.isItPrimary(),
                 influxHttpClient,
                 converter,
                 this.getOperationsStatisticBuffer(),

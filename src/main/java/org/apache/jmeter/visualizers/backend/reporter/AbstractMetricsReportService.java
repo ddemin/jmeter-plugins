@@ -30,6 +30,7 @@ public abstract class AbstractMetricsReportService {
     private final OperationErrorsBuffer errorsBuffer;
     private final OperationMetaBuffer metaBuffer;
     private final Map<String, Object> additionalTestMetadataVariables;
+    private final boolean isItPrimaryJMeter;
 
     private int samplersLabelsHash;
     private String componentsVersion;
@@ -39,7 +40,7 @@ public abstract class AbstractMetricsReportService {
 
     public abstract void retryFailedRequests();
     protected abstract void sendStartEventAndMetadata(
-            Map<String, Object> additionalTestMetadataVariables, long timestampNs
+           boolean isItPrimaryJMeter, Map<String, Object> additionalTestMetadataVariables, long timestampNs
     );
     protected abstract void sendFinishEvent(long timestampNs);
     protected abstract void packAndSendOperationsMetadata(
@@ -50,11 +51,13 @@ public abstract class AbstractMetricsReportService {
     protected abstract void sendVersions(String componentsVersion, long timestampNs);
 
     public AbstractMetricsReportService(
+            boolean isItPrimaryJMeter,
             OperationStatisticBuffer statisticBuffer,
             OperationErrorsBuffer errorsBuffer,
             OperationMetaBuffer metaBuffer,
             Map<String, Object> additionalTestMetadataVariables
     ) {
+        this.isItPrimaryJMeter = isItPrimaryJMeter;
         this.statisticBuffer = statisticBuffer;
         this.errorsBuffer = errorsBuffer;
         this.metaBuffer = metaBuffer;
@@ -62,7 +65,9 @@ public abstract class AbstractMetricsReportService {
     }
 
     protected void init() {
-        sendStartEventAndMetadata(additionalTestMetadataVariables, toNsPrecision(System.currentTimeMillis()));
+        sendStartEventAndMetadata(
+                isItPrimaryJMeter, additionalTestMetadataVariables, toNsPrecision(System.currentTimeMillis())
+        );
     }
 
     void destroy() {
@@ -130,7 +135,7 @@ public abstract class AbstractMetricsReportService {
         }
     }
 
-    void collectAndTags(long timestampNs) {
+    void collectAndSendTags(long timestampNs) {
         if (!areTagsSent && isTestTagsDefined()) {
             LOG.info(
                     "Property '" + TAGS_PROPERTY_NAME + "' with test tags was detected. Send tags: "
@@ -159,7 +164,7 @@ public abstract class AbstractMetricsReportService {
             LOG.error(ex.getMessage(), ex);
             return false;
         }
-        return StringUtils.isNotEmpty(testTags) && testTags.contains(DELIMITER_LIST_ITEM);
+        return StringUtils.isNotEmpty(testTags);
     }
 
     private boolean isComponentsVersionsDefined() {

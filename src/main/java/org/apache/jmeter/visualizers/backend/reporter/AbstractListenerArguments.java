@@ -12,13 +12,14 @@ import static org.apache.jmeter.visualizers.backend.reporter.util.Utils.UNDEFINE
 public class AbstractListenerArguments extends Arguments {
     protected static final Arguments ARGUMENTS_DEFAULT = new Arguments();
 
+    private static final String ARG_IS_IT_PRIMARY
+            = "Is it primary JMeter instance ? (Test meta data will be defined by it)";
+
     private static final String ARG_TEST_ID
             = "Unique id of entire performance test. Must be the same across all JMeter instances";
     private static final String ARG_EXECUTION_ID = "Unique id of execution by this JMeter instance";
 
     private static final String ARG_ENVIRONMENT = "Test environment name (e.g. dev/test/prodlike/production)";
-    private static final String ARG_HOSTNAME = "Host name";
-
     private static final String ARG_NAME = "Test name (high-level description of test scenario)";
     private static final String ARG_PROFILE = "Load profile name";
     private static final String ARG_DETAILS = "Test environment global version/state/constraints description";
@@ -35,27 +36,28 @@ public class AbstractListenerArguments extends Arguments {
             = "Warm-up interval, seconds (if defined first X seconds will be excluded from analysis and report)";
 
     static {
+        ARGUMENTS_DEFAULT.addArgument(ARG_IS_IT_PRIMARY, "true");
+
         ARGUMENTS_DEFAULT.addArgument(ARG_TEST_ID, "${__UUID()}");
         ARGUMENTS_DEFAULT.addArgument(ARG_EXECUTION_ID, "${__UUID()}");
 
         ARGUMENTS_DEFAULT.addArgument(ARG_ENVIRONMENT, UNDEFINED);
-        ARGUMENTS_DEFAULT.addArgument(ARG_HOSTNAME, UNDEFINED);
+        ARGUMENTS_DEFAULT.addArgument(ARG_PROFILE, UNDEFINED);
 
         ARGUMENTS_DEFAULT.addArgument(ARG_NAME, UNDEFINED);
-        ARGUMENTS_DEFAULT.addArgument(ARG_PROFILE, UNDEFINED);
         ARGUMENTS_DEFAULT.addArgument(ARG_DETAILS, UNDEFINED);
+        ARGUMENTS_DEFAULT.addArgument(ARG_WARMUP_SEC, UNDEFINED);
+        ARGUMENTS_DEFAULT.addArgument(ARG_BATCHING_SEC, "30");
         ARGUMENTS_DEFAULT.addArgument(ARG_LABELS_ADDITIONAL, UNDEFINED);
 
         ARGUMENTS_DEFAULT.addArgument(ARG_ALLOWED_SAMPLERS_REGEX, ".*");
-        ARGUMENTS_DEFAULT.addArgument(ARG_ALLOWED_VARIABLES_REGEX, "EXCLUDE_EVERYTHING");
-        ARGUMENTS_DEFAULT.addArgument(ARG_BATCHING_SEC, "30");
-        ARGUMENTS_DEFAULT.addArgument(ARG_WARMUP_SEC, UNDEFINED);
+        ARGUMENTS_DEFAULT.addArgument(ARG_ALLOWED_VARIABLES_REGEX, "(?:JMETER_PRIMARY)");
     }
 
+    private final boolean isItPrimary;
     private final String testId;
     private final String executionId;
     private final String environment;
-    private final String hostname;
     private final String testname;
     private final String loadprofile;
     private final String details;
@@ -66,11 +68,12 @@ public class AbstractListenerArguments extends Arguments {
     private final int warmupInterval;
 
     public AbstractListenerArguments(BackendListenerContext context) throws Exception {
+        this.isItPrimary = context.getBooleanParameter(ARG_IS_IT_PRIMARY, true);
+
         this.testId = context.getParameter(ARG_TEST_ID);
         this.executionId = context.getParameter(ARG_EXECUTION_ID);
 
         this.environment = context.getParameter(ARG_ENVIRONMENT);
-        this.hostname = context.getParameter(ARG_HOSTNAME);
 
         this.testname = context.getParameter(ARG_NAME);
         this.loadprofile = context.getParameter(ARG_PROFILE);
@@ -84,6 +87,10 @@ public class AbstractListenerArguments extends Arguments {
         this.warmupInterval = Integer.parseInt(context.getParameter(ARG_WARMUP_SEC).trim());
     }
 
+    public Boolean isItPrimary() {
+        return this.isItPrimary;
+    }
+
     public String getTestId() {
         return this.testId;
     }
@@ -94,10 +101,6 @@ public class AbstractListenerArguments extends Arguments {
 
     public String getEnvironment() {
         return this.environment;
-    }
-
-    public String getHostname() {
-        return this.hostname;
     }
 
     public String getTestName() {

@@ -18,7 +18,7 @@ class OperationMetaBufferTest {
         SampleResult sample = new SampleResult(System.currentTimeMillis(), 1234L);
         String label = "service1: operation 1";
         sample.setSampleLabel(label);
-        buffer.putLabelsMeta(sample, " some label : some value , just label ,,");
+        buffer.putLabelsMeta(sample, " some label : some value , just label ,tags : tag1 |Tag2|tAG3,");
 
 
         assertThat(
@@ -31,7 +31,7 @@ class OperationMetaBufferTest {
         );
         assertThat(
                 buffer.getBuffer().get(label).get(MetaTypeEnum.LABEL),
-                hasSize(2)
+                hasSize(3)
         );
 
         assertThat(
@@ -41,6 +41,10 @@ class OperationMetaBufferTest {
         assertThat(
                 buffer.getBuffer().get(label).get(MetaTypeEnum.LABEL).get(1),
                 equalTo(new AbstractMap.SimpleEntry<>("just label", UNDEFINED))
+        );
+        assertThat(
+                buffer.getBuffer().get(label).get(MetaTypeEnum.LABEL).get(2),
+                equalTo(new AbstractMap.SimpleEntry<>("tags", "tag1 ,tag2,tag3"))
         );
     }
 

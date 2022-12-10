@@ -30,7 +30,6 @@ class LineProtocolConverterTest {
         converter = new LineProtocolConverter(
                 "1-1-1-1",
                 "2-2-2-2",
-                "host1",
                 "env1",
                 "profile1",
                 "some environment and execution details",
@@ -43,11 +42,15 @@ class LineProtocolConverterTest {
 
     @Test
     void lpStringTestStarted() {
-        String[] strArray = converter.createBuilderForTestMetadata(
-                        true, additionalVars, toNsPrecision(System.currentTimeMillis())
-                )
-                .build()
-                .split(String.valueOf(CHAR_UNIX_NEW_LINE));
+        String[] strArray =
+                converter.enrichWithTestMetadata(
+                                converter.createBuilderForTestEvent(
+                                        true, toNsPrecision(System.currentTimeMillis())
+                                ),
+                                additionalVars, toNsPrecision(System.currentTimeMillis())
+                        )
+                        .build()
+                        .split(String.valueOf(CHAR_UNIX_NEW_LINE));
 
         assertThat(strArray.length, is(3));
 
@@ -64,18 +67,18 @@ class LineProtocolConverterTest {
         );
         assertThat(
                 strArray[2],
-                startsWith("environment,test_uuid=1-1-1-1,uuid=2-2-2-2 "
-                        + "host=\"host1\",name=\"env1\",profile=\"profile1\" ")
+                startsWith("environment,test_uuid=1-1-1-1,uuid=2-2-2-2 name=\"env1\",profile=\"profile1\" ")
         );
     }
 
     @Test
     void lpStringForTestFinished() {
-        String[] strArray = converter.createBuilderForTestMetadata(
-                        false, additionalVars, toNsPrecision(System.currentTimeMillis())
-                )
-                .build()
-                .split(String.valueOf(CHAR_UNIX_NEW_LINE));
+        String[] strArray =
+                converter.createBuilderForTestEvent(
+                                false, toNsPrecision(System.currentTimeMillis())
+                        )
+                        .build()
+                        .split(String.valueOf(CHAR_UNIX_NEW_LINE));
 
         assertThat(strArray.length, is(1));
 

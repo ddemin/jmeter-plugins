@@ -21,6 +21,7 @@ public class InfluxDbService extends AbstractMetricsReportService {
     private final String bucketOperationMeta;
 
     public InfluxDbService(
+            boolean isItPrimaryJMeter,
             InfluxDbHttpClient httpClient,
             LineProtocolConverter converter,
             OperationStatisticBuffer statisticBuffer,
@@ -32,6 +33,7 @@ public class InfluxDbService extends AbstractMetricsReportService {
             Map<String, Object> additionalTestMetadataVariables
     ) {
         super(
+                isItPrimaryJMeter,
                 statisticBuffer,
                 errorsBuffer,
                 metaBuffer,
@@ -72,13 +74,20 @@ public class InfluxDbService extends AbstractMetricsReportService {
 
     public void sendFinishEvent(long timestampNs) {
         LOG.info("Send 'test finished' event");
-        LineProtocolBuilder builder = converter.createBuilderForTestMetadata(false, null, timestampNs);
+
+        LineProtocolBuilder builder = converter.createBuilderForTestEvent(false, timestampNs);
+
         send(bucketTestMeta, builder.build());
     }
 
-    public void sendStartEventAndMetadata(Map<String, Object> additionalVariables, long timestampNs) {
+    public void sendStartEventAndMetadata(boolean isItPrimaryJMeter, Map<String, Object> additionalVariables, long timestampNs) {
         LOG.info("Send 'test started' event and meta data");
-        LineProtocolBuilder builder = converter.createBuilderForTestMetadata(true, additionalVariables, timestampNs);
+
+        LineProtocolBuilder builder = converter.createBuilderForTestEvent(true, timestampNs);
+        if (isItPrimaryJMeter) {
+            converter.enrichWithTestMetadata(builder, additionalVariables, timestampNs);
+        }
+
         send(bucketTestMeta, builder.build());
     }
 

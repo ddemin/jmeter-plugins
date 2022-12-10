@@ -21,11 +21,14 @@ import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static org.apache.jmeter.visualizers.backend.reporter.influxdb2.InfluxDbServiceTest.WIREMOCK_PORT;
 import static org.apache.jmeter.visualizers.backend.reporter.util.Utils.toNsPrecision;
 import static org.awaitility.Awaitility.await;
 
-@WireMockTest(httpPort = 8078)
+@WireMockTest(httpPort = WIREMOCK_PORT)
 class InfluxDbServiceTest {
+
+    public static final int WIREMOCK_PORT = 8078;
 
     MetricsReportServiceScheduledTrigger trigger;
     InfluxDbService influxDbService;
@@ -36,7 +39,7 @@ class InfluxDbServiceTest {
     @BeforeEach
     void setup() throws MalformedURLException, URISyntaxException {
         InfluxDbHttpClient influxDbHttpClient = new InfluxDbHttpClient(
-                new URL("http://localhost:8078"),
+                new URL("http://localhost:" + WIREMOCK_PORT),
                 "testOrg",
                 "testToken"
         );
@@ -46,11 +49,11 @@ class InfluxDbServiceTest {
         metaBuffer = new OperationMetaBuffer();
 
         influxDbService = new InfluxDbService(
+                true,
                 influxDbHttpClient,
                 new LineProtocolConverter(
                         "1-1-1-1",
                         "2-2-2-2",
-                        "host1",
                         "env1",
                         "profile1",
                         "some details",
@@ -69,6 +72,7 @@ class InfluxDbServiceTest {
         );
 
         trigger = new MetricsReportServiceScheduledTrigger(
+                true,
                 influxDbService,
                 5
         );
@@ -99,7 +103,7 @@ class InfluxDbServiceTest {
                                 matching(
                                         "execution,test_uuid=1-1-1-1,uuid=2-2-2-2 is_it_started=true [0-9]+\\n"
                                                 + "label,test_uuid=1-1-1-1,uuid=2-2-2-2 details=\"some details\",name=\"some name\",period_sec=5i,user-label1=\"value1\",user-label2=\"value2\",variable_1=\"value 1\",variable_2=\"value 2\",warmup_sec=60i [0-9]+\\n"
-                                                + "environment,test_uuid=1-1-1-1,uuid=2-2-2-2 host=\"host1\",name=\"env1\",profile=\"profile1\" [0-9]+\\n"
+                                                + "environment,test_uuid=1-1-1-1,uuid=2-2-2-2 name=\"env1\",profile=\"profile1\" [0-9]+\\n"
                                 )
                         )
         );
@@ -108,7 +112,7 @@ class InfluxDbServiceTest {
     @Test
     void sendTags() {
         influxDbService.sendTags(
-                " tag1,,tag3   ,TaG4", toNsPrecision(System.currentTimeMillis())
+                " tag1||tag3   |TaG4", toNsPrecision(System.currentTimeMillis())
         );
 
         verify(

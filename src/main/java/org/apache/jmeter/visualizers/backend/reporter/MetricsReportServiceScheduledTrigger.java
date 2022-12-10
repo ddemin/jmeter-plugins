@@ -16,10 +16,14 @@ public class MetricsReportServiceScheduledTrigger implements Runnable {
     private final AbstractMetricsReportService reporterService;
     private final ScheduledExecutorService scheduler;
     private final long batchingPeriod;
+    private final boolean isItPrimaryJMeter;
 
     private ScheduledFuture<?> timerHandle;
 
-    public MetricsReportServiceScheduledTrigger(AbstractMetricsReportService reporterService, int batchingPeriod) {
+    public MetricsReportServiceScheduledTrigger(
+            boolean isItPrimaryJMeter, AbstractMetricsReportService reporterService, int batchingPeriod
+    ) {
+        this.isItPrimaryJMeter = isItPrimaryJMeter;
         this.reporterService = reporterService;
         this.scheduler = Executors.newScheduledThreadPool(1);
         this.batchingPeriod = batchingPeriod;
@@ -30,8 +34,10 @@ public class MetricsReportServiceScheduledTrigger implements Runnable {
         reporterService.collectOperationsLabels();
 
         long timestampNs = toNsPrecision(System.currentTimeMillis());
-        reporterService.collectAndTags(timestampNs);
-        reporterService.collectAndSendVersions(timestampNs);
+        if (isItPrimaryJMeter) {
+            reporterService.collectAndSendTags(timestampNs);
+            reporterService.collectAndSendVersions(timestampNs);
+        }
 
         reporterService.sendOperationsMetrics(timestampNs);
 

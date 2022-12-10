@@ -26,8 +26,13 @@ public class LineProtocolConverter {
     private static final String STAT_TYPE_RATE = "rate";
     private static final String STAT_TYPE_SHARE = "share";
 
+    private static final String MEASUREMENT_EXECUTION = "execution";
+    private static final String MEASUREMENT_ENVIRONMENT = "environment";
+    private static final String MEASUREMENT_LABEL = "label";
+    private static final String MEASUREMENT_VERSION = "version";
+    private static final String DELIMITER_TAGS_LIST_ITEMS = "|";
+
     private final String testUuid;
-    private final String hostname;
     private final String environment;
     private final String executionUuid;
     private final String profile;
@@ -38,14 +43,13 @@ public class LineProtocolConverter {
     private final Integer batchingPeriod;
 
     public LineProtocolConverter(String testUuid, String executionUuid,
-                                 String hostname, String environment,
+                                  String environment,
                                  String profile, String details, String testname,
                                  Map<String, Object> userLabels,
                                  int warmupInterval, int batchingPeriod) {
         this.testUuid = testUuid;
         this.executionUuid = executionUuid;
         this.environment = environment;
-        this.hostname = hostname;
         this.profile = profile;
         this.details = details;
         this.testname = testname;
@@ -54,84 +58,46 @@ public class LineProtocolConverter {
         this.batchingPeriod = batchingPeriod;
     }
 
-    public LineProtocolBuilder createBuilderForTestMetadata(
-            boolean isItStarted,
-            Map<String, Object> additionalJmeterVariables,
-            long timestampNs
-    ) {
+    public LineProtocolBuilder createBuilderForTestEvent(boolean isItStarted, long timestampNs) {
         LineProtocolBuilder protocolBuilder = LineProtocolBuilder.withFirstRow(
-                "execution",
+                MEASUREMENT_EXECUTION,
                 buildTestMetaTags(),
                 List.of(new AbstractMap.SimpleEntry<>("is_it_started", isItStarted)),
                 timestampNs
         );
 
-        if (isItStarted) {
-            final Map<String, String> tags = buildTestMetaTags();
+        return protocolBuilder;
+    }
 
-            final Map<String, Object> labelFields = new TreeMap<>();
-            labelFields.put("name", testname);
-            labelFields.put("details", details);
-            labelFields.put("warmup_sec", warmupInterval);
-            labelFields.put("period_sec", batchingPeriod);
+    public LineProtocolBuilder enrichWithTestMetadata(
+            LineProtocolBuilder protocolBuilder,
+            Map<String, Object> additionalJmeterVariables,
+            long timestampNs
+    ) {
+        final Map<String, String> tags = buildTestMetaTags();
 
-            if (additionalJmeterVariables != null) {
-                additionalJmeterVariables.entrySet()
-                        .stream()
-                        .map(
-                                e ->
-                                        e.getValue() == null
-                                                ? new AbstractMap.SimpleEntry<>(e.getKey(), (Object) UNDEFINED)
-                                                : new AbstractMap.SimpleEntry<>(e.getKey().toLowerCase(), e.getValue())
-                        )
-                        .map(
-                                e ->
-                                        (e.getValue() instanceof String && StringUtils.isEmpty((String) e.getValue()))
-                                                ? new AbstractMap.SimpleEntry<>(e.getKey(), (Object) UNDEFINED)
-                                                : new AbstractMap.SimpleEntry<>(e.getKey().toLowerCase(), e.getValue())
-                        )
-                        .forEach(entry -> labelFields.put(entry.getKey(), entry.getValue()));
-            }
-
-            userLabels.forEach(
-                    (key, value) -> {
-                        if (StringUtils.isEmpty(value.toString())) {
-                            labelFields.put(key, UNDEFINED);
-                        } else {
-                            labelFields.put(key, value);
-                        }
-                    }
-            );
-
-            protocolBuilder.appendRow(
-                    "label",
-                    tags,
-                    labelFields.entrySet().stream().toList(),
-                    timestampNs
-            );
-
-            final Map<String, String> environmentFields = new TreeMap<>();
-            environmentFields.put("name", environment);
-            environmentFields.put("profile", profile);
-            environmentFields.put("host", hostname);
-
-            protocolBuilder.appendRowWithTextFields(
-                    "environment",
-                    tags,
-                    environmentFields.entrySet().stream().toList(),
-                    timestampNs
-            );
-        }
+        enrichWithLabels(additionalJmeterVariables, timestampNs, protocolBuilder, tags);
+        enrichWithEnvironments(timestampNs, protocolBuilder, tags);
 
         return protocolBuilder;
     }
 
     public LineProtocolBuilder createBuilderForTags(String tags, long timestampNs) {
-        return createBuilderForDelimitedItems("label", "tags", tags, timestampNs);
+        String formattedFieldValue = toListWithLowerCase(tags, "\\" + DELIMITER_TAGS_LIST_ITEMS)
+                .stream()
+                .sorted()
+                .collect(Collectors.joining(DELIMITER_LIST_ITEM));
+
+        return LineProtocolBuilder.withFirstRow(
+                MEASUREMENT_LABEL,
+                buildTestMetaTags(),
+                List.of(new AbstractMap.SimpleEntry<>("tags", formattedFieldValue)),
+                timestampNs
+        );
     }
 
     public LineProtocolBuilder createBuilderForVersions(String versions, long timestampNs) {
-        return createBuilderForKeyValueString("version", versions, timestampNs);
+        return createBuilderForKeyValueString(MEASUREMENT_VERSION, versions, timestampNs);
     }
 
     public LineProtocolBuilder createBuilderForOperationsStatistic(
@@ -142,7 +108,7 @@ public class LineProtocolConverter {
 
         statisticsByMetricName
                 .forEach((key, value) -> {
-                    Map<String, String> tags = parseSamplerNameToTags(key);
+                    Map<String, String> tags = buildOperationsTags(key);
 
                     value.forEach(
                             (metric, stats) -> {
@@ -193,7 +159,7 @@ public class LineProtocolConverter {
     ) {
         LineProtocolBuilder lpBuilder = new LineProtocolBuilder();
         metaByMetricName.forEach((samplerName, metricMeta) -> {
-            Map<String, String> tags = parseSamplerNameToTags(samplerName);
+            Map<String, String> tags = buildOperationsTags(samplerName);
             metricMeta.forEach((metric, meta) -> {
                 meta.forEach(
                         (entry) ->
@@ -219,7 +185,8 @@ public class LineProtocolConverter {
             long timestampNs
     ) {
         errorStatsBySamplerName.forEach((samplerName, errorsMeta) -> {
-            Map<String, String> tags = parseSamplerNameToTags(samplerName);
+            Map<String, String> tags = buildOperationsTags(samplerName);
+
             errorsMeta.forEach((errorDetail, statistic) -> {
                 tags.put("reason", errorDetail);
                 lpBuilder
@@ -240,6 +207,12 @@ public class LineProtocolConverter {
                         "test_uuid", testUuid
                 )
         );
+    }
+
+    Map<String, String> buildOperationsTags(String sampleLabel) {
+        var tagsMap = new TreeMap<>(Map.of(MEASUREMENT_EXECUTION, executionUuid));
+        tagsMap.putAll(parseSamplerNameToTags(sampleLabel));
+        return tagsMap;
     }
 
     Map<String, String> parseSamplerNameToTags(String sampleLabel) {
@@ -263,29 +236,7 @@ public class LineProtocolConverter {
             );
         }
 
-        return new TreeMap<>(
-                Map.of(
-                        "execution", executionUuid,
-                        "target", targetService,
-                        "operation", operation
-                )
-        );
-    }
-
-    LineProtocolBuilder createBuilderForDelimitedItems(
-            String measurement, String fieldName, String delimitedItems, long timestampNs
-    ) {
-        String formattedFieldValue = toListWithLowerCase(delimitedItems)
-                .stream()
-                .sorted()
-                .collect(Collectors.joining(","));
-
-        return LineProtocolBuilder.withFirstRow(
-                measurement,
-                buildTestMetaTags(),
-                List.of(new AbstractMap.SimpleEntry<>(fieldName, formattedFieldValue)),
-                timestampNs
-        );
+        return Map.of("target", targetService, "operation", operation);
     }
 
     LineProtocolBuilder createBuilderForKeyValueString(String measurement, String mapAsString, long timestampNs) {
@@ -318,5 +269,60 @@ public class LineProtocolConverter {
         );
     }
 
+    void enrichWithEnvironments(long timestampNs, LineProtocolBuilder protocolBuilder, Map<String, String> tags) {
+        final Map<String, String> environmentFields = new TreeMap<>();
+        environmentFields.put("name", environment);
+        environmentFields.put("profile", profile);
+
+        protocolBuilder.appendRowWithTextFields(
+                MEASUREMENT_ENVIRONMENT,
+                tags,
+                environmentFields.entrySet().stream().toList(),
+                timestampNs
+        );
+    }
+
+    void enrichWithLabels(Map<String, Object> additionalJmeterVariables, long timestampNs, LineProtocolBuilder protocolBuilder, Map<String, String> tags) {
+        final Map<String, Object> labelFields = new TreeMap<>();
+        labelFields.put("name", testname);
+        labelFields.put("details", details);
+        labelFields.put("warmup_sec", warmupInterval);
+        labelFields.put("period_sec", batchingPeriod);
+
+        if (additionalJmeterVariables != null) {
+            additionalJmeterVariables.entrySet()
+                    .stream()
+                    .map(
+                            e ->
+                                    e.getValue() == null
+                                            ? new AbstractMap.SimpleEntry<>(e.getKey(), (Object) UNDEFINED)
+                                            : new AbstractMap.SimpleEntry<>(e.getKey().toLowerCase(), e.getValue())
+                    )
+                    .map(
+                            e ->
+                                    (e.getValue() instanceof String && StringUtils.isEmpty((String) e.getValue()))
+                                            ? new AbstractMap.SimpleEntry<>(e.getKey(), (Object) UNDEFINED)
+                                            : new AbstractMap.SimpleEntry<>(e.getKey().toLowerCase(), e.getValue())
+                    )
+                    .forEach(entry -> labelFields.put(entry.getKey(), entry.getValue()));
+        }
+
+        userLabels.forEach(
+                (key, value) -> {
+                    if (StringUtils.isEmpty(value.toString())) {
+                        labelFields.put(key, UNDEFINED);
+                    } else {
+                        labelFields.put(key, value);
+                    }
+                }
+        );
+
+        protocolBuilder.appendRow(
+                MEASUREMENT_LABEL,
+                tags,
+                labelFields.entrySet().stream().toList(),
+                timestampNs
+        );
+    }
 
 }
