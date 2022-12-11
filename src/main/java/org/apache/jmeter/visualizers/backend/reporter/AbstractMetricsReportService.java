@@ -65,6 +65,8 @@ public abstract class AbstractMetricsReportService {
     }
 
     protected void init() {
+        resetContext();
+
         sendStartEventAndMetadata(
                 isItPrimaryJMeter, additionalTestMetadataVariables, toNsPrecision(System.currentTimeMillis())
         );
@@ -86,13 +88,7 @@ public abstract class AbstractMetricsReportService {
             LOG.error("Something goes wrong during InfluxDB integration teardown: " + tr.getMessage(), tr);
         }
 
-        this.statisticBuffer.clear();
-        this.errorsBuffer.clear();
-        this.metaBuffer.clear();
-        this.labelsThatReported.clear();
-        this.componentsVersion = null;
-        this.areVersionsSent = false;
-        this.samplersLabelsHash = 0;
+        resetContext();
 
         LOG.info("InfluxDB service and job have been stopped, buffer has been cleaned");
     }
@@ -144,6 +140,19 @@ public abstract class AbstractMetricsReportService {
             sendTags(testTags, timestampNs);
             areTagsSent = true;
         }
+    }
+
+    void resetContext() {
+        this.statisticBuffer.clear();
+        this.errorsBuffer.clear();
+        this.metaBuffer.clear();
+
+        this.componentsVersion = null;
+        this.areVersionsSent = false;
+        this.areTagsSent = false;
+
+        this.labelsThatReported.clear();
+        this.samplersLabelsHash = 0;
     }
 
     void collectAndSendVersions(long timestampNs) {
