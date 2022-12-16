@@ -14,4 +14,4 @@ cache:
     - $HOME/.gradle/wrapper/
 
 script:
-  - ./gradlew clean jar
+  - ./gradlew clean test jar
