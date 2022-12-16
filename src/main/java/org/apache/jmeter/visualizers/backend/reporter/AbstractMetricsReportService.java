@@ -16,14 +16,13 @@ import java.util.Set;
 import static org.apache.jmeter.visualizers.backend.reporter.util.Utils.*;
 
 public abstract class AbstractMetricsReportService {
+
     private static final Logger LOG = LoggerFactory.getLogger(AbstractMetricsReportService.class);
 
     private static final int PAUSE_BEFORE_LAST_BATCH_MS = 10_000;
     private static final String TAGS_PROPERTY_NAME = "jmeter.test.tags";
     private static final String VERSIONS_PROPERTY_NAME = "jmeter.components.versions";
     private static final String OPERATIONS_LABELS_PROPERTY = "jmeter.operations.labels";
-    private static final String DELIMITER_SAMPLERS_LABELS_KV = "=";
-    private static final String DELIMITER_SAMPLERS_LABELS_ITEMS = ";";
 
     private final Set<String> labelsThatReported = Collections.synchronizedSet(new HashSet<>());
     private final OperationStatisticBuffer statisticBuffer;
@@ -38,15 +37,15 @@ public abstract class AbstractMetricsReportService {
     private boolean areVersionsSent;
     private boolean areTagsSent;
 
-    public abstract void retryFailedRequests();
+    protected abstract void retryFailedRequests();
     protected abstract void sendStartEventAndMetadata(
            boolean isItPrimaryJMeter, Map<String, Object> additionalTestMetadataVariables, long timestampNs
     );
     protected abstract void sendFinishEvent(long timestampNs);
-    protected abstract void packAndSendOperationsMetadata(
+    protected abstract void sendOperationsMetadata(
             long timestampNs, OperationMetaBuffer buffer, OperationErrorsBuffer errorsBuffer
     );
-    protected abstract void packAndSendOperationsStatistic(long timestampNs, OperationStatisticBuffer buffer);
+    protected abstract void sendOperationsStatistic(long timestampNs, OperationStatisticBuffer buffer);
     protected abstract void sendTags(String testTags, long timestampNs);
     protected abstract void sendVersions(String componentsVersion, long timestampNs);
 
@@ -122,9 +121,9 @@ public abstract class AbstractMetricsReportService {
 
     void sendOperationsMetrics(long timestampNs) {
         try {
-            packAndSendOperationsMetadata(timestampNs, metaBuffer, errorsBuffer);
+            sendOperationsMetadata(timestampNs, metaBuffer, errorsBuffer);
 
-            packAndSendOperationsStatistic(timestampNs, statisticBuffer);
+            sendOperationsStatistic(timestampNs, statisticBuffer);
 
         } catch (Throwable tr) {
             LOG.error("Something goes wrong during InfluxDB integration: " + tr.getMessage(), tr);

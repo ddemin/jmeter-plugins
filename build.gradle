@@ -14,6 +14,11 @@ repositories {
 def withoutBom = {
     exclude group: 'org.apache.jmeter', module: 'bom'
 }
+
+tasks.withType(JavaCompile) {
+    options.release = 11
+}
+
 dependencies {
     implementation group: 'org.apache.jmeter', name: 'ApacheJMeter_components', version: "$jmeterVer", withoutBom
     implementation group: 'org.apache.jmeter', name: 'ApacheJMeter_http', version: "$jmeterVer", withoutBom

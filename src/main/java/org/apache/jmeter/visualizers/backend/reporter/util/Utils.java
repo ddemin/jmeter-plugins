@@ -16,6 +16,9 @@ public class Utils {
     public static final String UNDEFINED = "undefined";
     public static final String DELIMITER_KEY_VALUE = ":";
     public static final String DELIMITER_LIST_ITEM = ",";
+    public static final String DELIMITER_TAGS_LIST_ITEMS = "|";
+    public static final String DELIMITER_SAMPLERS_LABELS_KV = "=";
+    public static final String DELIMITER_SAMPLERS_LABELS_ITEMS = ";";
 
     public static long toNsPrecision(long ms) {
         return ms * 1_000_000 + RandomUtils.nextInt(0, 999_999);

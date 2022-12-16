@@ -92,7 +92,7 @@ public class InfluxDbService extends AbstractMetricsReportService {
     }
 
     @Override
-    protected void packAndSendOperationsMetadata(
+    protected void sendOperationsMetadata(
             long timestampNs, OperationMetaBuffer buffer, OperationErrorsBuffer errorsBuffer
     ) {
         LineProtocolBuilder lineProtocolBuilderMeta;
@@ -121,7 +121,7 @@ public class InfluxDbService extends AbstractMetricsReportService {
     }
 
     @Override
-    protected void packAndSendOperationsStatistic(long timestampNs, OperationStatisticBuffer buffer) {
+    protected void sendOperationsStatistic(long timestampNs, OperationStatisticBuffer buffer) {
         LineProtocolBuilder lineProtocolBuilderStats;
         // TODO Move critical section to abstract class somehow
         synchronized (buffer.getBuffer()) {

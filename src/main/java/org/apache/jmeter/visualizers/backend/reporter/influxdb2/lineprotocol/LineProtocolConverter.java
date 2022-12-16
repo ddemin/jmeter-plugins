@@ -30,7 +30,6 @@ public class LineProtocolConverter {
     private static final String MEASUREMENT_ENVIRONMENT = "environment";
     private static final String MEASUREMENT_LABEL = "label";
     private static final String MEASUREMENT_VERSION = "version";
-    private static final String DELIMITER_TAGS_LIST_ITEMS = "|";
 
     private final String testUuid;
     private final String environment;
@@ -43,7 +42,7 @@ public class LineProtocolConverter {
     private final Integer batchingPeriod;
 
     public LineProtocolConverter(String testUuid, String executionUuid,
-                                  String environment,
+                                 String environment,
                                  String profile, String details, String testname,
                                  Map<String, Object> userLabels,
                                  int warmupInterval, int batchingPeriod) {
@@ -119,30 +118,40 @@ public class LineProtocolConverter {
                                 // Prevent any stats changing (#add method) during processing
                                 synchronized (stats) {
                                     switch (metric) {
-                                        case LATENCY, NETWORK -> lpBuilder
-                                                .appendLineProtocolField(STAT_TYPE_AVERAGE, stats.getAverage())
-                                                .appendLineProtocolField(STAT_TYPE_MAX, stats.getMax())
-                                                .appendLineProtocolField(STAT_TYPE_MIN, stats.getMin())
-                                                .appendLineProtocolField(STAT_TYPE_MEDIAN, stats.getPercentile(50))
-                                                .appendLineProtocolField(STAT_TYPE_PERC_95, stats.getPercentile(95))
-                                                .appendLineProtocolField(STAT_TYPE_PERC_99, stats.getPercentile(99));
-                                        case LOAD, ERROR -> lpBuilder
-                                                .appendLineProtocolField(STAT_TYPE_COUNT, stats.getSum())
-                                                .appendLineProtocolField(
-                                                        STAT_TYPE_RATE,
-                                                        stats.getSum() / (float) batchingPeriod
-                                                );
+                                        case LATENCY:
+                                        case NETWORK:
+                                            lpBuilder
+                                                    .appendLineProtocolField(STAT_TYPE_AVERAGE, stats.getAverage())
+                                                    .appendLineProtocolField(STAT_TYPE_MAX, stats.getMax())
+                                                    .appendLineProtocolField(STAT_TYPE_MIN, stats.getMin())
+                                                    .appendLineProtocolField(STAT_TYPE_MEDIAN, stats.getPercentile(50))
+                                                    .appendLineProtocolField(STAT_TYPE_PERC_95, stats.getPercentile(95))
+                                                    .appendLineProtocolField(STAT_TYPE_PERC_99, stats.getPercentile(99));
+                                            break;
+                                        case LOAD:
+                                        case ERROR:
+                                            lpBuilder
+                                                    .appendLineProtocolField(STAT_TYPE_COUNT, stats.getSum())
+                                                    .appendLineProtocolField(
+                                                            STAT_TYPE_RATE,
+                                                            stats.getSum() / (float) batchingPeriod
+                                                    );
+                                            break;
                                     }
                                     // Additional statistic
                                     switch (metric) {
-                                        case ERROR -> lpBuilder.appendLineProtocolField(
-                                                STAT_TYPE_SHARE,
-                                                stats.getSum() / (float) stats.getSamples()
-                                        );
-                                        case NETWORK -> lpBuilder.appendLineProtocolField(
-                                                STAT_TYPE_RATE,
-                                                stats.getSum() / (float) batchingPeriod
-                                        );
+                                        case ERROR:
+                                            lpBuilder.appendLineProtocolField(
+                                                    STAT_TYPE_SHARE,
+                                                    stats.getSum() / (float) stats.getSamples()
+                                            );
+                                            break;
+                                        case NETWORK:
+                                            lpBuilder.appendLineProtocolField(
+                                                    STAT_TYPE_RATE,
+                                                    stats.getSum() / (float) batchingPeriod
+                                            );
+                                            break;
                                     }
                                 }
                                 lpBuilder.appendLineProtocolTimestampNs(timestampNs);
@@ -259,7 +268,7 @@ public class LineProtocolConverter {
                 )
                 .filter(Objects::nonNull)
                 .sorted(Map.Entry.comparingByKey())
-                .toList();
+                .collect(Collectors.toList());
 
         return LineProtocolBuilder.withFirstRow(
                 measurement,
@@ -277,7 +286,7 @@ public class LineProtocolConverter {
         protocolBuilder.appendRowWithTextFields(
                 MEASUREMENT_ENVIRONMENT,
                 tags,
-                environmentFields.entrySet().stream().toList(),
+                environmentFields.entrySet().stream().collect(Collectors.toList()),
                 timestampNs
         );
     }
@@ -320,7 +329,7 @@ public class LineProtocolConverter {
         protocolBuilder.appendRow(
                 MEASUREMENT_LABEL,
                 tags,
-                labelFields.entrySet().stream().toList(),
+                labelFields.entrySet().stream().collect(Collectors.toList()),
                 timestampNs
         );
     }

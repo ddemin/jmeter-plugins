@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static org.apache.jmeter.visualizers.backend.reporter.util.Utils.*;
 
@@ -40,7 +41,7 @@ public class OperationMetaBuffer {
                                     }
                                     return entry;
                                 })
-                                .toList()
+                                .collect(Collectors.toList())
                 );
     }
 
